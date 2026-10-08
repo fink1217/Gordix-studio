@@ -77,25 +77,12 @@
             background: #000;
         }
 
+        /* 預覽畫布只用來做影像運算，畫面上改由工作台視圖顯示 */
         #preview-canvas {
-            display: block;
-            image-rendering: auto;
-            transition: opacity 0.2s;
-            /* 移除 max-width 限制，交由縮放邏輯處理 */
-        }
-        #vector-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            pointer-events: none;
+            display: none;
         }
         .layer-hidden {
             display: none !important;
-        }
-        .canvas-dimmed {
-            opacity: 0.15;
         }
         input[type=range] {
             accent-color: #3b82f6;
@@ -114,6 +101,25 @@
         .custom-file-upload:hover {
             background: #3b82f6;
         }
+
+        /* 進階功能：沒有開啟進階模式時隱藏 */
+        body:not(.show-advanced) [data-advanced] { display: none !important; }
+
+        /* 擺放面板的數字欄位，右側顯示單位 */
+        .num-field { display: flex; flex-direction: column; gap: 2px; font-size: 10px; font-weight: 700; color: #64748b; }
+        .num-wrap { position: relative; display: block; }
+        .num-wrap::after {
+            content: attr(data-unit); position: absolute; right: 8px; top: 50%; transform: translateY(-50%);
+            font-size: 10px; color: #94a3b8; pointer-events: none;
+        }
+        .num-in {
+            width: 100%; padding: 6px 30px 6px 8px; border-radius: 6px; outline: none;
+            font-family: ui-monospace, Consolas, monospace; font-size: 13px;
+            background: #ffffff; border: 1px solid #cbd5e1; color: #1e293b;
+        }
+        .dark .num-in { background: #1e293b; border-color: #334155; color: #ffffff; }
+        .num-in:disabled { opacity: 0.4; }
+        #workspace text { font-family: ui-monospace, Consolas, monospace; user-select: none; }
 
         /* 隱藏 Chrome, Safari, Edge, Opera 的數字輸入框內建上下微調按鈕，防止遮擋 "mm" */
         input::-webkit-outer-spin-button,
@@ -158,6 +164,8 @@
                 <button id="lang-toggle" class="px-3 py-1.5 rounded-lg text-[11px] font-bold bg-white/10 hover:bg-white/20 text-white border border-white/20 transition-all flex items-center gap-2">
                     <span id="lang-toggle-text">中文 / EN</span>
                 </button>
+                <!-- 進階功能開關 -->
+                <button id="advanced-toggle" class="px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all"></button>
                 <!-- 書頁按鈕 -->
                 <a href="params.html" class="flex items-center justify-center text-slate-300 hover:text-emerald-400 transition-colors bg-white/10 hover:bg-white/20 p-1.5 rounded-lg border border-white/20 cursor-pointer" title="工藝參數建議 / Parameters Guide">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
@@ -194,7 +202,7 @@
                         </div>
                         <input type="range" id="threshold-slider" min="0" max="255" value="128" class="w-full h-1.5 bg-slate-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer">
                     </div>
-                    <div>
+                    <div data-advanced>
                         <div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 none font-black mb-2 tracking-widest">
                             <span id="i18n-label-noise">雜點過濾 (輪廓)</span>
                             <span id="noise-val-text" class="text-indigo-600 dark:text-indigo-400 font-mono font-bold">10 px</span>
@@ -204,7 +212,7 @@
                 </section>
 
                 <!-- 曲線優化 -->
-                <section class="p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-blue-500/30 space-y-4 transition-colors duration-300">
+                <section data-advanced class="p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-blue-500/30 space-y-4 transition-colors duration-300">
                     <div>
                         <div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 none font-black mb-2 tracking-widest">
                             <span id="i18n-label-smooth">曲線平滑度</span>
@@ -251,7 +259,7 @@
                                 <input type="number" id="fill-spacing" value="1.0" step="0.1" min="0.1" class="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 p-2 rounded text-xs outline-none text-slate-800 dark:text-white font-mono transition-colors duration-300">
                             </div>
                         </div>
-                        <div class="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
+                        <div data-advanced class="flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
                             <label id="i18n-label-gray-fill" class="text-[10px] font-bold text-slate-500 dark:text-slate-400">灰階漸變填滿</label>
                             <input type="checkbox" id="enable-grayscale-fill" class="w-4 h-4 accent-blue-500 rounded">
                         </div>
@@ -272,6 +280,14 @@
                             <span id="i18n-legend-fill" class="text-[10px] font-bold text-slate-500 dark:text-slate-400 none">填滿區塊</span>
                         </div>
                         <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-sm border-2 border-dashed border-sky-500"></span>
+                            <span id="legend-range" class="text-[10px] font-bold text-slate-500 dark:text-slate-400">加工範圍</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-sm bg-amber-700/60 border border-amber-500"></span>
+                            <span id="legend-board" class="text-[10px] font-bold text-slate-500 dark:text-slate-400">板材</span>
+                        </div>
+                        <div class="flex items-center gap-2">
                             <span class="w-3 h-3 rounded-full border border-dashed border-slate-400 dark:border-slate-500"></span>
                             <span id="legend-grid" class="text-[10px] font-bold text-slate-500 dark:text-slate-400">5cm 參考格線</span>
                         </div>
@@ -285,18 +301,25 @@
                 </div>
                 
                 <div class="canvas-container shadow-inner" id="container">
-                    <div class="absolute top-0 left-0 transition-none transform-gpu origin-top-left" id="zoom-wrapper" style="transform: translate(0px, 0px) scale(1);">
-                        <canvas id="preview-canvas"></canvas>
-                        <svg id="vector-overlay">
-                            <!-- 尺寸網格層放置於背景層，避免遮擋向量輪廓 -->
-                            <g id="grid-group"></g>
-                            <g id="hatch-group"></g>
-                            <g id="contour-group"></g>
-                        </svg>
+                    <!-- 工作台視圖：SVG 座標單位為 mm，原點為機器中心，螢幕往下為 -Y -->
+                    <svg id="workspace" class="absolute inset-0 w-full h-full">
+                        <g id="ws-static"></g>
+                        <g id="ws-design">
+                            <g id="design-inner">
+                                <image id="design-image" preserveAspectRatio="none" opacity="0.5"></image>
+                                <rect id="design-hit" fill="transparent" pointer-events="all"></rect>
+                                <g id="hatch-group"></g>
+                                <g id="contour-group"></g>
+                            </g>
+                        </g>
+                        <g id="ws-chrome"></g>
+                    </svg>
+                    <canvas id="preview-canvas"></canvas>
+                    <div id="empty-state" class="absolute bottom-4 inset-x-0 flex justify-center pointer-events-none">
+                        <p id="i18n-empty-msg" class="text-xs font-black tracking-widest px-3 py-1.5 rounded-lg bg-slate-900/70 text-slate-200">請上傳圖片以開始</p>
                     </div>
-                    <div id="empty-state" class="absolute inset-0 flex items-center justify-center text-slate-700">
-                        <p id="i18n-empty-msg" class="text-xs font-black tracking-widest none opacity-40 dark:opacity-20 text-slate-500 dark:text-slate-300">請上傳圖片以開始</p>
-                    </div>
+                    <div id="ws-warning" class="hidden absolute top-3 inset-x-3 flex flex-col items-center gap-1 pointer-events-none"></div>
+                    <button id="btn-fit-view" class="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-800/80 text-white border border-slate-600 hover:bg-slate-700">全景</button>
                 </div>
             </div>
 
@@ -315,20 +338,84 @@
                     <div id="offset-preview" class="mt-2 text-[9px] font-mono text-slate-500 dark:text-slate-400 italic">Y-Offset: 0.00mm</div>
                 </section>
 
-                <!-- 輸出寬度 & 工作走速 -->
-                <section class="grid grid-cols-2 gap-3">
+                <!-- Z 軸筆觸：校準筆的壓入深度，灰階深淺換算成筆觸粗細 -->
+                <section data-advanced class="p-4 bg-violet-50 dark:bg-violet-950/20 rounded-xl border border-violet-200 dark:border-violet-500/20 space-y-3">
+                    <div class="flex justify-between items-center">
+                        <label data-i18n="penzTitle" class="text-[10px] font-black text-violet-700 dark:text-violet-400 tracking-widest">Z 軸筆觸</label>
+                        <input type="checkbox" id="penz-enable" class="w-4 h-4 accent-violet-500 rounded">
+                    </div>
+                    <p data-i18n="penzStep1" class="text-[10px] text-slate-600 dark:text-slate-300"></p>
                     <div>
-                        <label id="i18n-label-width" class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 none">輸出寬度 (mm)</label>
-                        <input type="number" id="target-width" value="100" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-2 rounded text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono transition-colors duration-300">
+                        <p data-i18n="penzStep2" class="text-[10px] text-slate-600 dark:text-slate-300 mb-2"></p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="num-field"><span data-i18n="penzMax"></span><span class="num-wrap" data-unit="mm"><input type="number" id="penz-max" class="num-in" min="0.1" max="2.5" step="0.1"></span></label>
+                            <label class="num-field"><span data-i18n="penzStep"></span><span class="num-wrap" data-unit="mm"><input type="number" id="penz-step" class="num-in" min="0.05" step="0.05"></span></label>
+                            <label class="num-field"><span data-i18n="penzLift"></span><span class="num-wrap" data-unit="mm"><input type="number" id="penz-lift" class="num-in" min="0.2" step="0.1"></span></label>
+                            <label class="num-field"><span data-i18n="penzFeed"></span><span class="num-wrap" data-unit="F"><input type="number" id="penz-feed" class="num-in" min="10" step="10"></span></label>
+                        </div>
+                        <p id="penz-levels" class="mt-2 text-[10px] font-mono text-violet-700 dark:text-violet-300 leading-relaxed"></p>
+                        <button id="btn-penz-download" data-i18n="penzDownload" class="mt-2 w-full py-2 rounded-lg text-[11px] font-bold bg-violet-600 hover:bg-violet-500 text-white"></button>
                     </div>
                     <div>
-                        <label id="i18n-label-feed" class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 none">工作走速 (F)</label>
-                        <input type="number" id="feed-rate" value="1500" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-2 rounded text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono transition-colors duration-300">
+                        <p data-i18n="penzStep3" class="text-[10px] text-slate-600 dark:text-slate-300 mb-2"></p>
+                        <div class="grid grid-cols-2 gap-2">
+                            <label class="num-field"><span data-i18n="penzLight"></span><select id="penz-light" class="num-in"></select></label>
+                            <label class="num-field"><span data-i18n="penzDark"></span><select id="penz-dark" class="num-in"></select></label>
+                            <label class="num-field"><span data-i18n="penzWLight"></span><span class="num-wrap" data-unit="mm"><input type="number" id="penz-wlight" class="num-in" min="0.05" step="0.05"></span></label>
+                            <label class="num-field"><span data-i18n="penzWDark"></span><span class="num-wrap" data-unit="mm"><input type="number" id="penz-wdark" class="num-in" min="0.05" step="0.05"></span></label>
+                        </div>
+                    </div>
+                    <p data-i18n="penzLimit" class="text-[9px] font-bold text-red-600 dark:text-red-400"></p>
+                </section>
+
+                <!-- 工作台：讀取桌長配置產生器存下的資料 -->
+                <section class="p-4 bg-slate-100 dark:bg-slate-950/50 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label id="i18n-label-table" class="text-[10px] font-black text-slate-500 dark:text-slate-400 tracking-widest">工作台</label>
+                        <a href="table_conf.html" id="i18n-link-table" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline">修改尺寸 →</a>
+                    </div>
+                    <select id="table-select" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-2 rounded text-xs outline-none text-slate-800 dark:text-white"></select>
+                    <div id="table-info" class="text-[11px] font-mono text-slate-600 dark:text-slate-300 leading-relaxed"></div>
+                    <div id="table-unset" class="hidden text-[10px] font-bold text-amber-600 dark:text-amber-400"></div>
+                </section>
+
+                <!-- 板材：實際放在工作台上的料 -->
+                <section class="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label id="i18n-label-board" class="text-[10px] font-black text-amber-700 dark:text-amber-400 tracking-widest">板材</label>
+                        <input type="checkbox" id="board-enable" class="w-4 h-4 accent-amber-500 rounded" checked>
+                    </div>
+                    <div id="board-fields" class="space-y-2">
+                        <p id="i18n-board-tip" class="text-[9px] text-slate-500 dark:text-slate-400">用捲尺量板材每個角到兩個治具的直線距離。N 側的兩個角量 NW、NE 治具；S 側的兩個角量 SW、SE 治具。</p>
+                        <!-- 每個板材角：兩個欄位分別是到兩個治具的距離，欄位由 JS 依 BOARD_CORNERS 產生 -->
+                        <div id="board-corner-inputs" class="space-y-2"></div>
+                        <div id="board-summary" class="text-[10px] font-mono text-amber-700 dark:text-amber-300 leading-relaxed"></div>
                     </div>
                 </section>
 
+                <!-- 加工物件：上傳的圖案 -->
+                <section class="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-500/20 space-y-2">
+                    <label id="i18n-label-object" class="block text-[10px] font-black text-emerald-700 dark:text-emerald-400 tracking-widest">加工物件</label>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="num-field"><span id="i18n-obj-w">寬</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-w" class="num-in" min="1" step="0.1" disabled></span></label>
+                        <label class="num-field"><span id="i18n-obj-h">高</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-h" class="num-in" min="1" step="0.1" disabled></span></label>
+                        <label class="num-field"><span>X</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-x" class="num-in" step="0.1" disabled></span></label>
+                        <label class="num-field"><span>Y</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-y" class="num-in" step="0.1" disabled></span></label>
+                        <button id="btn-obj-board" class="py-1.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30" disabled>置中於板材</button>
+                        <button id="btn-obj-origin" class="py-1.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30" disabled>置中於原點</button>
+                    </div>
+                    <p id="i18n-obj-tip" class="text-[9px] text-slate-500 dark:text-slate-400">X / Y 為物件中心相對機器中心的位置。可直接在預覽中拖曳移動，拖右下角縮放（等比例）。</p>
+                    <input type="hidden" id="target-width" value="100">
+                </section>
+
+                <!-- 工作走速 -->
+                <section>
+                    <label id="i18n-label-feed" class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 none">工作走速 (F)</label>
+                    <input type="number" id="feed-rate" value="1500" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-2 rounded text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono transition-colors duration-300">
+                </section>
+
                 <!-- 灰階雷射功率範圍設定 (僅在啟用灰階填滿時顯示) -->
-                <section id="grayscale-power-container" class="hidden p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 transition-all duration-300">
+                <section id="grayscale-power-container" data-advanced class="hidden p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 transition-all duration-300">
                     <div class="flex justify-between items-center mb-1">
                         <label id="i18n-label-grayscale-power" class="text-[10px] font-black text-amber-600 dark:text-amber-400 tracking-widest">灰階功率範圍 (S)</label>
                         <span id="grayscale-range-display" class="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">S0 - S255</span>
@@ -352,6 +439,7 @@
 
                 <!-- 輸出設定 (格式、下載、統計) -> 預設常駐顯示 -->
                 <div id="status-panel" class="space-y-4">
+                    <div id="advanced-notice" class="hidden p-3 rounded-xl bg-violet-600/15 border border-violet-500/40 text-[10px] font-bold text-violet-700 dark:text-violet-300"></div>
                     <div class="p-4 bg-slate-100 dark:bg-slate-950/50 rounded-xl border border-slate-200 dark:border-slate-800 transition-colors duration-300">
                         <span id="i18n-label-format" class="text-[10px] font-black text-slate-500 dark:text-slate-400 none tracking-widest block mb-2">輸出格式</span>
                         <div class="flex gap-2 mb-3">
@@ -375,6 +463,7 @@
         </div>
     </div>
 
+    <script src="gordix-table.js"></script>
     <script>
         const i18n = {
             zh: {
@@ -419,7 +508,49 @@
                 statsContours: "輪廓路徑",
                 statsLines: "填滿線條",
                 noFile: "尚未選擇檔案",
-                noData: "請上傳檔案以產生加工數據"
+                noData: "請上傳檔案以產生加工數據",
+                legendRange: "加工範圍",
+                legendBoard: "板材",
+                labelTable: "工作台",
+                linkTable: "修改尺寸 →",
+                tableName: "工作台",
+                tableUnset: "尚未在桌長配置產生器設定，目前使用預設尺寸",
+                labelBoard: "板材",
+                labelObject: "加工物件",
+                width: "寬",
+                height: "高",
+                boardTip: "用捲尺量板材每個角到兩個治具的直線距離。N 側的兩個角量 NW、NE 治具；S 側的兩個角量 SW、SE 治具。",
+                boardCorner: "角",
+                jig: "治具",
+                boardEdges: "板材四邊",
+                boardUnlocated: "角無法定位：兩段距離對不上（相加比兩治具間距短，或相差太多），請重新量測",
+                warnBoardInvalid: "⚠ 板材量測值無法定位，請檢查右側數值",
+                btnObjBoard: "置中於板材",
+                btnObjOrigin: "置中於原點",
+                objTip: "X / Y 為物件中心相對機器中心的位置（+Y 朝 N 邊）。可直接在預覽中拖曳移動，拖右下角白色方塊等比例縮放。",
+                fitView: "全景",
+                front: "機器前側",
+                warnRange: "⚠ 加工物件超出機器加工範圍",
+                warnBoard: "⚠ 加工物件超出板材",
+                statsPos: "中心位置",
+                penzTitle: "Z 軸筆觸",
+                advancedOff: "進階",
+                advancedOn: "進階 ✓",
+                advancedActive: "進階設定作用中（已隱藏）",
+                penzStep1: "① 在機器上用平常的 Z 軸歸零方式，把 Z0 設在筆尖剛好碰到板材的位置。",
+                penzStep2: "② 下載校準測試檔並執行：每條線壓入深度不同，左側會畫出編號。測試位置在板材中心。",
+                penzMax: "測試最深壓入",
+                penzStep: "每條間隔",
+                penzLift: "抬筆高度",
+                penzFeed: "下筆速度",
+                penzCount: "共 {n} 條",
+                penzDownload: "下載校準測試檔",
+                penzStep3: "③ 看板材上的編號，選出最細與最粗可接受的線，並量線寬（預覽用）。",
+                penzLight: "最細（白）",
+                penzDark: "最粗（黑）",
+                penzWLight: "最細線寬",
+                penzWDark: "最粗線寬",
+                penzLimit: "安全限制：筆夾彈簧行程 3.33 mm，任何情況壓入深度都不超過 2.5 mm。勾選 Z 軸筆觸後不輸出 M03/M05。"
             },
             en: {
                 title: "Draw Converter",
@@ -463,7 +594,49 @@
                 statsContours: "Contours",
                 statsLines: "Fill Lines",
                 noFile: "No file chosen",
-                noData: "Please upload a file to generate data"
+                noData: "Please upload a file to generate data",
+                legendRange: "Work range",
+                legendBoard: "Board",
+                labelTable: "Table",
+                linkTable: "Edit size →",
+                tableName: "Table",
+                tableUnset: "Not set in Table Configurator yet, using default size",
+                labelBoard: "Board",
+                labelObject: "Object",
+                width: "W",
+                height: "H",
+                boardTip: "Tape-measure the straight distance from each board corner to two jigs. The two N-side corners use the NW and NE jigs; the two S-side corners use the SW and SE jigs.",
+                boardCorner: "corner",
+                jig: "jig",
+                boardEdges: "Board edges",
+                boardUnlocated: "cannot be located: the two distances don't fit (sum shorter than the jig spacing, or too different). Please re-measure.",
+                warnBoardInvalid: "⚠ Board measurements cannot be located, check the values on the right",
+                btnObjBoard: "Center on board",
+                btnObjOrigin: "Center on origin",
+                objTip: "X / Y is the object center relative to the machine center (+Y toward side N). Drag the object in the preview to move it; drag the white corner square to scale proportionally.",
+                fitView: "Fit",
+                front: "Machine front",
+                warnRange: "⚠ Object exceeds the machine work range",
+                warnBoard: "⚠ Object extends beyond the board",
+                statsPos: "Center",
+                penzTitle: "Z-axis Pen Stroke",
+                advancedOff: "Advanced",
+                advancedOn: "Advanced ✓",
+                advancedActive: "Advanced settings active (hidden)",
+                penzStep1: "① On the machine, set Z0 (your usual Z zeroing) with the pen tip just touching the board.",
+                penzStep2: "② Download and run the calibration file: each line presses to a different depth, numbered on its left. It is drawn at the board center.",
+                penzMax: "Deepest test press",
+                penzStep: "Step per line",
+                penzLift: "Pen lift height",
+                penzFeed: "Plunge speed",
+                penzCount: "{n} lines",
+                penzDownload: "Download calibration file",
+                penzStep3: "③ Read the numbers on the board, pick the thinnest and thickest acceptable lines, and measure their widths (for preview).",
+                penzLight: "Thinnest (white)",
+                penzDark: "Thickest (black)",
+                penzWLight: "Thinnest width",
+                penzWDark: "Thickest width",
+                penzLimit: "Safety limit: pen holder spring travel is 3.33 mm; press depth never exceeds 2.5 mm. M03/M05 are not output in Z mode."
             }
         };
 
@@ -496,14 +669,11 @@
             }
             updateOutputFormatUI();
             
-            if (originalImage) {
-                const currentScale = isSvgSource ? (1000 / parseFloat(widthInput.value)) : (previewCanvas.width / parseFloat(widthInput.value));
-                renderGrid(previewCanvas.width, previewCanvas.height, currentScale);
-                // 變更主題時，若為 SVG / DXF 來源，則一併重繪畫布底圖與背景線條以適應對比
-                if (isSvgSource) {
-                    processImage();
-                }
+            // 變更主題時，若為 SVG / DXF 來源，則一併重繪畫布底圖與背景線條以適應對比
+            if (originalImage && isSvgSource) {
+                processImage();
             }
+            renderWorkspace();
         }
 
         function updateUI() {
@@ -512,7 +682,6 @@
             document.getElementById('i18n-label-pen-diam').innerText = data.labelPenDiam;
             document.getElementById('i18n-label-source').innerText = data.labelSource;
             document.getElementById('i18n-btn-browse').innerText = data.btnBrowse;
-            document.getElementById('i18n-label-width').innerText = data.labelWidth;
             document.getElementById('i18n-label-feed').innerText = data.labelFeed;
             document.getElementById('i18n-label-threshold').innerText = data.labelThreshold;
             document.getElementById('i18n-label-noise').innerText = data.labelNoise;
@@ -536,6 +705,25 @@
             document.getElementById('toggle-image').innerText = data.toggleImg;
             document.getElementById('toggle-contour').innerText = data.toggleContour;
             document.getElementById('toggle-hatch').innerText = data.toggleHatch;
+            document.getElementById('legend-range').innerText = data.legendRange;
+            document.getElementById('legend-board').innerText = data.legendBoard;
+            document.getElementById('i18n-label-table').innerText = data.labelTable;
+            document.getElementById('i18n-link-table').innerText = data.linkTable;
+            document.getElementById('i18n-label-board').innerText = data.labelBoard;
+            document.getElementById('i18n-label-object').innerText = data.labelObject;
+            document.getElementById('i18n-obj-w').innerText = data.width;
+            document.getElementById('i18n-obj-h').innerText = data.height;
+            document.getElementById('i18n-board-tip').innerText = data.boardTip;
+            renderBoardInputs();
+            document.querySelectorAll('[data-i18n]').forEach(el => { el.innerText = data[el.dataset.i18n]; });
+            renderPenPanel();
+            renderAdvancedState();
+            document.getElementById('btn-obj-board').innerText = data.btnObjBoard;
+            document.getElementById('btn-obj-origin').innerText = data.btnObjOrigin;
+            document.getElementById('i18n-obj-tip').innerText = data.objTip;
+            document.getElementById('btn-fit-view').innerText = data.fitView;
+            renderTablePanel();
+            renderWorkspace();
             document.getElementById('i18n-opt-0').innerText = data.opt0;
             document.getElementById('i18n-opt-45').innerText = data.opt45;
             document.getElementById('i18n-opt-90').innerText = data.opt90;
@@ -572,29 +760,15 @@
             offsetPreview.innerText = `Y-Offset: ${offset.toFixed(2)}mm`;
         }
 
-        const state = {
-            scale: 1,
-            translateX: 0,
-            translateY: 0,
-            isDragging: false,
-            lastMouseX: 0,
-            lastMouseY: 0,
-            evCache: [],
-            prevDiff: -1
-        };
-
         const container = document.getElementById('container');
-        const zoomWrapper = document.getElementById('zoom-wrapper');
         const fileInput = document.getElementById('file-input');
         const fileNameDisplay = document.getElementById('file-name-display');
         const downloadBtn = document.getElementById('download-btn');
         const filenameLabel = document.getElementById('filename-preview');
         const previewCanvas = document.getElementById('preview-canvas');
         const pCtx = previewCanvas.getContext('2d', { willReadFrequently: true });
-        const svgOverlay = document.getElementById('vector-overlay');
         const hatchGroup = document.getElementById('hatch-group');
         const contourGroup = document.getElementById('contour-group');
-        const gridGroup = document.getElementById('grid-group');
         
         const thresholdSlider = document.getElementById('threshold-slider');
         const thresholdValText = document.getElementById('threshold-val-text');
@@ -690,7 +864,6 @@
             }
         };
 
-        widthInput.oninput = () => { if (originalImage) recomputeFillLines(); };
         feedInput.oninput = () => { if (originalImage) updateStats(previewCanvas.width, previewCanvas.height); };
         fillAngleSelect.onchange = () => { if (originalImage) recomputeFillLines(); };
         fillSpacingInput.oninput = () => { if (originalImage) recomputeFillLines(); };
@@ -727,11 +900,12 @@
 
         grayscaleFillCheckbox.onchange = () => { 
             toggleGrayscalePowerUI();
+            renderAdvancedState();
             if (originalImage) triggerLiveProcess(); 
         };
 
         function updateLayerVisibility() {
-            previewCanvas.classList.toggle('canvas-dimmed', !showImage);
+            designImage.setAttribute('opacity', showImage ? '0.5' : '0.08');
             contourGroup.classList.toggle('layer-hidden', !showContour);
             hatchGroup.classList.toggle('layer-hidden', !showHatch);
             btnToggleImg.style.opacity = showImage ? "1" : "0.4";
@@ -746,114 +920,430 @@
         btnFormatGcode.onclick = () => { outputMode = "gcode"; updateOutputFormatUI(); };
         btnFormatSvg.onclick = () => { outputMode = "svg"; updateOutputFormatUI(); };
 
-        function updateTransform() {
-            zoomWrapper.style.transform = `translate(${state.translateX}px, ${state.translateY}px) scale(${state.scale})`;
+        // ===== 工作台視圖 =====
+        // SVG 座標單位為 mm，原點為機器中心；機器座標 +Y 朝 N 邊，所以 SVG 的 y = -Y。
+        const workspace = document.getElementById('workspace');
+        const wsStatic = document.getElementById('ws-static');
+        const wsDesign = document.getElementById('ws-design');
+        const wsChrome = document.getElementById('ws-chrome');
+        const wsWarning = document.getElementById('ws-warning');
+        const designInner = document.getElementById('design-inner');
+        const designImage = document.getElementById('design-image');
+        const designHit = document.getElementById('design-hit');
+        const tableSelect = document.getElementById('table-select');
+        const boardEnable = document.getElementById('board-enable');
+        const BOARD_KEY = 'gordix-board';
+
+        const savedTables = GordixTable.load();
+        const tables = savedTables ? savedTables.tables : GordixTable.DEFAULTS;
+        let tableId = savedTables && tables[savedTables.currentId] ? String(savedTables.currentId) : '1';
+
+        // 板材以「每個角到兩個治具的直線距離」量測（三角定位），量測值記在瀏覽器裡下次沿用
+        const BOARD_CORNERS = [
+            { id: 'NW', jigs: ['NW', 'NE'] },
+            { id: 'NE', jigs: ['NW', 'NE'] },
+            { id: 'SE', jigs: ['SW', 'SE'] },
+            { id: 'SW', jigs: ['SW', 'SE'] }
+        ];
+        const board = { on: true, m: null };
+        try { Object.assign(board, JSON.parse(localStorage.getItem(BOARD_KEY)) || {}); } catch (e) { }
+        if (!board.m) board.m = defaultBoardMeasure();
+
+        // 預設：一塊 300 × 200 mm 的板材放在工作台正中央，反推它的量測值
+        function defaultBoardMeasure() {
+            const jig = GordixTable.corners(tables[tableId]);
+            const at = { NW: { x: -150, y: 100 }, NE: { x: 150, y: 100 }, SE: { x: 150, y: -100 }, SW: { x: -150, y: -100 } };
+            const m = {};
+            BOARD_CORNERS.forEach(c => {
+                m[c.id] = c.jigs.map(j => Math.round(Math.hypot(at[c.id].x - jig[j].x, at[c.id].y - jig[j].y) * 10) / 10);
+            });
+            return m;
         }
 
-        function resetView() {
-            if (!originalImage) return;
-            const rect = container.getBoundingClientRect();
-            const contentW = previewCanvas.width;
-            const contentH = previewCanvas.height;
-            
-            const padding = 100;
-            const scaleW = (rect.width - padding) / contentW;
-            const scaleH = (rect.height - padding) / contentH;
-            state.scale = Math.min(scaleW, scaleH, 1.0);
-            
-            state.translateX = (rect.width - contentW * state.scale) / 2;
-            state.translateY = (rect.height - contentH * state.scale) / 2;
-            
-            updateTransform();
+        // 由量測值算出板材四角（機器座標）；量不出交點的角為 null
+        function boardCorners() {
+            const jig = GordixTable.corners(tables[tableId]);
+            const pts = {};
+            BOARD_CORNERS.forEach(c => {
+                const [a, b] = board.m[c.id] || [];
+                pts[c.id] = GordixTable.locate(jig[c.jigs[0]], jig[c.jigs[1]], a, b);
+            });
+            return pts;
         }
 
-        container.addEventListener('wheel', (e) => {
+        // 依 NW → NE → SE → SW 順序的板材多邊形；有任何角定位失敗時回傳 null
+        function boardPolygon() {
+            const p = boardCorners();
+            const order = ['NW', 'NE', 'SE', 'SW'];
+            return order.every(k => p[k]) ? order.map(k => p[k]) : null;
+        }
+
+        function boardCenter() {
+            const poly = boardPolygon();
+            if (!poly) return { x: 0, y: 0 };
+            return { x: poly.reduce((s, p) => s + p.x, 0) / 4, y: poly.reduce((s, p) => s + p.y, 0) / 4 };
+        }
+
+        function insidePolygon(pt, poly) {
+            let inside = false;
+            for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+                const a = poly[i], b = poly[j];
+                if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+            }
+            return inside;
+        }
+
+        // 加工物件中心 (mm)，以輪廓外框中心為準
+        const design = { x: 0, y: 0 };
+        const view = { x: 0, y: 0, w: 1, h: 1 };
+        const drag = { mode: null, startClient: null, orig: null, pointers: new Map(), pinchDist: 0 };
+
+        function saveBoard() {
+            try { localStorage.setItem(BOARD_KEY, JSON.stringify(board)); } catch (e) { }
+        }
+
+        function currentWidthMm() {
+            const v = parseFloat(widthInput.value);
+            return (isNaN(v) || v <= 0) ? 100 : v;
+        }
+
+        function mmPerPx() {
+            return currentWidthMm() / previewCanvas.width;
+        }
+
+        // 輪廓與填滿線的外框（預覽畫布像素座標）
+        function designBoxPx() {
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            const up = p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); };
+            finalContours.forEach(path => path.forEach(up));
+            finalFillLines.forEach(line => line.pts.forEach(up));
+            if (minX === Infinity) return { minX: 0, minY: 0, maxX: previewCanvas.width, maxY: previewCanvas.height };
+            return { minX, minY, maxX, maxY };
+        }
+
+        // 加工物件的實際尺寸與四邊位置（機器座標 mm）
+        function designBoxMm() {
+            const b = designBoxPx(), k = mmPerPx();
+            const w = (b.maxX - b.minX) * k, h = (b.maxY - b.minY) * k;
+            return { w, h, left: design.x - w / 2, right: design.x + w / 2, bottom: design.y - h / 2, top: design.y + h / 2 };
+        }
+
+        function updateDesignTransform() {
+            wsDesign.style.display = originalImage ? '' : 'none';
             if (!originalImage) return;
+            const b = designBoxPx(), k = mmPerPx();
+            designInner.setAttribute('transform',
+                `translate(${design.x} ${-design.y}) scale(${k}) translate(${-(b.minX + b.maxX) / 2} ${-(b.minY + b.maxY) / 2})`);
+            designHit.setAttribute('x', b.minX);
+            designHit.setAttribute('y', b.minY);
+            designHit.setAttribute('width', b.maxX - b.minX);
+            designHit.setAttribute('height', b.maxY - b.minY);
+        }
+
+        function fitView() {
+            const jig = Object.values(GordixTable.corners(tables[tableId]));
+            const rect = workspace.getBoundingClientRect();
+            if (!rect.width || !rect.height) return;
+            const minX = Math.min(...jig.map(p => p.x)), maxX = Math.max(...jig.map(p => p.x));
+            const minY = Math.min(...jig.map(p => -p.y)), maxY = Math.max(...jig.map(p => -p.y));
+            const aspect = rect.width / rect.height;
+            view.w = Math.max((maxX - minX) * 1.12, (maxY - minY) * 1.22 * aspect);
+            view.h = view.w / aspect;
+            view.x = (minX + maxX) / 2 - view.w / 2;
+            view.y = (minY + maxY) / 2 - view.h / 2;
+            applyView();
+        }
+
+        function applyView() {
+            workspace.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
+            renderWorkspace();
+        }
+
+        function toSvg(clientX, clientY) {
+            const r = workspace.getBoundingClientRect();
+            return { x: view.x + (clientX - r.left) / r.width * view.w, y: view.y + (clientY - r.top) / r.height * view.h };
+        }
+
+        function zoomAt(clientX, clientY, factor) {
+            const p = toSvg(clientX, clientY);
+            const newW = Math.min(Math.max(view.w / factor, 20), 20000);
+            const f = newW / view.w;
+            view.x = p.x - (p.x - view.x) * f;
+            view.y = p.y - (p.y - view.y) * f;
+            view.w = newW;
+            view.h *= f;
+            applyView();
+        }
+
+        function svgText(x, y, str, size, fill, anchor = 'middle', weight = 'bold') {
+            return `<text x="${x}" y="${y}" font-size="${size}" fill="${fill}" text-anchor="${anchor}" font-weight="${weight}" pointer-events="none">${str}</text>`;
+        }
+
+        // 重畫工作台、加工範圍、板材、機器與物件外框（物件本身的路徑不在這裡重畫）
+        function renderWorkspace() {
+            const d = i18n[currentLang];
+            const t = tables[tableId];
+            const range = GordixTable.workRange(t);
+            const u = view.w / (workspace.clientWidth || 1); // 1 個螢幕像素等於幾 mm
+            const isDark = document.documentElement.classList.contains('dark');
+            const c = isDark
+                ? { table: '#1e293b', edge: '#64748b', grid: 'rgba(255,255,255,0.07)', text: 'rgba(255,255,255,0.6)' }
+                : { table: '#f1f5f9', edge: '#94a3b8', grid: 'rgba(15,23,42,0.08)', text: 'rgba(15,23,42,0.65)' };
+            const fs = 11 * u;
+            const nss = 'vector-effect="non-scaling-stroke"';
+            const s = [];
+            const jig = GordixTable.corners(t);
+            const sv = p => `${p.x},${-p.y}`; // 機器座標 → SVG 座標
+            const mid = (p, q) => ({ x: (p.x + q.x) / 2, y: (p.y + q.y) / 2 });
+
+            // 工作台（桌長配置的實際四邊形）與 5cm 格線，格線裁切在桌面內
+            const tablePts = [jig.NW, jig.NE, jig.SE, jig.SW].map(sv).join(' ');
+            const xs = Object.values(jig).map(p => p.x), ys = Object.values(jig).map(p => -p.y);
+            const [x0, x1, y0, y1] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+            s.push(`<clipPath id="table-clip"><polygon points="${tablePts}"/></clipPath>`);
+            s.push(`<polygon points="${tablePts}" fill="${c.table}" stroke="${c.edge}" stroke-width="2" ${nss}/>`);
+            s.push(`<g clip-path="url(#table-clip)">`);
+            for (let x = Math.ceil(x0 / 50) * 50; x <= x1; x += 50) {
+                s.push(`<line x1="${x}" y1="${y0}" x2="${x}" y2="${y1}" stroke="${c.grid}" stroke-width="1" ${nss}/>`);
+            }
+            for (let y = Math.ceil(y0 / 50) * 50; y <= y1; y += 50) {
+                s.push(`<line x1="${x0}" y1="${y}" x2="${x1}" y2="${y}" stroke="${c.grid}" stroke-width="1" ${nss}/>`);
+            }
+            s.push(`</g>`);
+            const nMid = mid(jig.NW, jig.NE), sMid = mid(jig.SW, jig.SE), wMid = mid(jig.NW, jig.SW), eMid = mid(jig.NE, jig.SE);
+            s.push(svgText(nMid.x, -Math.max(jig.NW.y, jig.NE.y) - 8 * u, `${d.tableName} ${t.S} × ${t.W} mm`, fs, c.text));
+            s.push(svgText(nMid.x, -nMid.y + fs + 4 * u, 'N', fs, c.text));
+            s.push(svgText(sMid.x, -sMid.y - 6 * u, `S · ${d.front}`, fs, '#ea580c'));
+            s.push(svgText(wMid.x + 6 * u, -wMid.y + fs * 0.35, 'W', fs, c.text, 'start'));
+            s.push(svgText(eMid.x - 6 * u, -eMid.y + fs * 0.35, 'E', fs, c.text, 'end'));
+
+            // 角落治具（板材量測的基準點）
+            Object.entries(jig).forEach(([k, p]) => {
+                s.push(`<circle cx="${p.x}" cy="${-p.y}" r="${5 * u}" fill="${c.edge}" stroke="#ffffff" stroke-width="1" ${nss}/>`);
+                s.push(svgText(p.x + (p.x < 0 ? 8 : -8) * u, -p.y + (p.y > 0 ? -7 : 15) * u, k, fs * 0.9, c.text, p.x < 0 ? 'start' : 'end'));
+            });
+
+            // 加工範圍
+            s.push(`<rect x="${-range.x}" y="${-range.y}" width="${range.x * 2}" height="${range.y * 2}" fill="rgba(14,165,233,0.05)" stroke="#0ea5e9" stroke-width="1.5" stroke-dasharray="6 4" ${nss}/>`);
+            s.push(svgText(-range.x + 5 * u, -range.y + fs + 4 * u, `${d.legendRange} ${range.x * 2} × ${range.y * 2} mm`, fs, '#0ea5e9', 'start'));
+
+            // 板材：由量測值三角定位出四角，並畫出量測線方便對照實際拉捲尺的位置
+            const poly = board.on ? boardPolygon() : null;
+            if (board.on) {
+                const pts = boardCorners();
+                BOARD_CORNERS.forEach(bc => {
+                    if (!pts[bc.id]) return;
+                    bc.jigs.forEach(j => s.push(`<line x1="${jig[j].x}" y1="${-jig[j].y}" x2="${pts[bc.id].x}" y2="${-pts[bc.id].y}" stroke="#f59e0b" stroke-opacity="0.35" stroke-width="1" stroke-dasharray="3 4" ${nss}/>`));
+                });
+            }
+            if (poly) {
+                s.push(`<polygon points="${poly.map(sv).join(' ')}" fill="rgba(180,83,9,0.35)" stroke="#f59e0b" stroke-width="1.5" ${nss}/>`);
+                s.push(svgText(poly[0].x + 4 * u, -Math.max(poly[0].y, poly[1].y) + fs + 3 * u, d.legendBoard, fs, '#f59e0b', 'start'));
+            }
+            wsStatic.innerHTML = s.join('');
+
+            // 機器中心與前側方向（最上層，不擋滑鼠）
+            const m = [];
+            m.push(`<circle cx="0" cy="0" r="${7 * u}" fill="none" stroke="#ea580c" stroke-width="2" ${nss}/>`);
+            m.push(`<line x1="${-12 * u}" y1="0" x2="${12 * u}" y2="0" stroke="#ea580c" stroke-width="1" ${nss}/>`);
+            m.push(`<line x1="0" y1="${-12 * u}" x2="0" y2="${12 * u}" stroke="#ea580c" stroke-width="1" ${nss}/>`);
+            m.push(`<path d="M0 ${14 * u} L0 ${40 * u} M${-5 * u} ${32 * u} L0 ${40 * u} L${5 * u} ${32 * u}" fill="none" stroke="#ea580c" stroke-width="2" ${nss}/>`);
+            m.push(svgText(8 * u, 32 * u, d.front, fs * 0.9, '#ea580c', 'start'));
+
+            // 加工物件外框、尺寸與縮放把手
+            const warnings = [];
+            if (board.on && !poly) warnings.push(['bg-amber-500', d.warnBoardInvalid]);
+            if (originalImage) {
+                const b = designBoxMm();
+                const yOff = penYOffset();
+                const outRange = b.left < -range.x || b.right > range.x || b.bottom + yOff < -range.y || b.top + yOff > range.y;
+                const boxCorners = [{ x: b.left, y: b.top }, { x: b.right, y: b.top }, { x: b.right, y: b.bottom }, { x: b.left, y: b.bottom }];
+                const outBoard = !!poly && !boxCorners.every(p => insidePolygon(p, poly));
+                if (outRange) warnings.push(['bg-red-600', d.warnRange]);
+                if (outBoard) warnings.push(['bg-amber-500', d.warnBoard]);
+                const color = outRange ? '#dc2626' : '#10b981';
+                m.push(`<rect x="${b.left}" y="${-b.top}" width="${b.w}" height="${b.h}" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 3" ${nss}/>`);
+                m.push(svgText(design.x, -b.top - 6 * u, `${b.w.toFixed(1)} × ${b.h.toFixed(1)} mm`, fs, color));
+                const hsz = 10 * u;
+                m.push(`<rect id="design-handle" x="${b.right - hsz / 2}" y="${-b.bottom - hsz / 2}" width="${hsz}" height="${hsz}" fill="#ffffff" stroke="${color}" stroke-width="2" ${nss} style="cursor: nwse-resize; pointer-events: all"/>`);
+            }
+            wsChrome.innerHTML = m.join('');
+            wsChrome.style.pointerEvents = 'none';
+
+            wsWarning.innerHTML = warnings.map(([cls, msg]) =>
+                `<span class="${cls} text-white text-[11px] font-bold px-3 py-1 rounded-lg shadow">${msg}</span>`).join('');
+            wsWarning.classList.toggle('hidden', warnings.length === 0);
+
+            syncPanel();
+        }
+
+        function penYOffset() {
+            const dPen = parseFloat(penDiamInput.value) || 0;
+            return (dPen === 0) ? 0 : (dPen / 2) - 12.6;
+        }
+
+        // 把目前數值寫回右側欄位（使用者正在輸入的那一格不動）
+        function syncPanel() {
+            const set = (id, v) => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = v; };
+            boardEnable.checked = board.on;
+            BOARD_CORNERS.forEach(bc => [0, 1].forEach(i => set(`board-${bc.id}-${i}`, board.m[bc.id][i])));
+            renderBoardSummary();
+            const fields = document.getElementById('board-fields');
+            fields.style.opacity = board.on ? '1' : '0.4';
+            fields.style.pointerEvents = board.on ? 'auto' : 'none';
+
+            const on = !!originalImage;
+            ['obj-w', 'obj-h', 'obj-x', 'obj-y', 'btn-obj-board', 'btn-obj-origin'].forEach(id => document.getElementById(id).disabled = !on);
+            if (on) {
+                const b = designBoxMm();
+                set('obj-w', b.w.toFixed(1)); set('obj-h', b.h.toFixed(1));
+                set('obj-x', design.x.toFixed(1)); set('obj-y', design.y.toFixed(1));
+            }
+        }
+
+        function renderTablePanel() {
+            const d = i18n[currentLang];
+            tableSelect.innerHTML = Object.keys(tables).map(id =>
+                `<option value="${id}" ${id === tableId ? 'selected' : ''}>${d.tableName} ${id} — ${tables[id].S} × ${tables[id].W} mm</option>`).join('');
+            const r = GordixTable.workRange(tables[tableId]);
+            document.getElementById('table-info').innerText = `${d.legendRange}: ${r.x * 2} × ${r.y * 2} mm (±${r.x}, ±${r.y})`;
+            const unset = document.getElementById('table-unset');
+            unset.innerText = d.tableUnset;
+            unset.classList.toggle('hidden', !!savedTables);
+        }
+
+        tableSelect.onchange = () => { tableId = tableSelect.value; renderTablePanel(); fitView(); };
+
+        // 縮放物件：保持中心不動，依比例改輸出寬度後重算填滿線
+        function scaleDesign(ratio) {
+            if (!(ratio > 0) || !isFinite(ratio)) return;
+            widthInput.value = (currentWidthMm() * ratio).toFixed(3);
+            recomputeFillLines();
+        }
+
+        const numVal = id => parseFloat(document.getElementById(id).value);
+
+        // 板材量測欄位：每個角兩格，分別是到兩個治具的距離
+        function renderBoardInputs() {
+            const d = i18n[currentLang];
+            document.getElementById('board-corner-inputs').innerHTML = BOARD_CORNERS.map(bc => `
+                <div>
+                    <div class="text-[10px] font-black text-amber-700 dark:text-amber-400 mb-1">${bc.id} ${d.boardCorner}</div>
+                    <div class="grid grid-cols-2 gap-2">
+                        ${bc.jigs.map((j, i) => `<label class="num-field"><span>→ ${j} ${d.jig}</span><span class="num-wrap" data-unit="mm"><input type="number" id="board-${bc.id}-${i}" data-corner="${bc.id}" data-idx="${i}" class="num-in" min="1" step="0.1"></span></label>`).join('')}
+                    </div>
+                </div>`).join('');
+        }
+        renderBoardInputs(); // 先建立欄位，主題初始化時重畫工作台會用到
+
+        // 量測結果摘要：四邊長，以及定位失敗的角
+        function renderBoardSummary() {
+            const d = i18n[currentLang];
+            const p = boardCorners();
+            const bad = BOARD_CORNERS.filter(bc => !p[bc.id]).map(bc => bc.id);
+            const len = (a, b) => (p[a] && p[b]) ? Math.hypot(p[a].x - p[b].x, p[a].y - p[b].y).toFixed(1) : '—';
+            document.getElementById('board-summary').innerText =
+                `${d.boardEdges}: N ${len('NW', 'NE')} · S ${len('SW', 'SE')} · W ${len('NW', 'SW')} · E ${len('NE', 'SE')} mm` +
+                (bad.length ? `\n⚠ ${bad.join(', ')} ${d.boardUnlocated}` : '');
+        }
+
+        document.getElementById('board-corner-inputs').addEventListener('input', (e) => {
+            const el = e.target;
+            if (!el.dataset.corner) return;
+            board.m[el.dataset.corner][parseInt(el.dataset.idx, 10)] = parseFloat(el.value) || 0;
+            saveBoard();
+            renderWorkspace();
+        });
+        boardEnable.onchange = () => { board.on = boardEnable.checked; saveBoard(); renderWorkspace(); };
+
+        document.getElementById('obj-w').addEventListener('change', () => scaleDesign(numVal('obj-w') / designBoxMm().w));
+        document.getElementById('obj-h').addEventListener('change', () => scaleDesign(numVal('obj-h') / designBoxMm().h));
+        ['obj-x', 'obj-y'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+            if (!isNaN(numVal('obj-x'))) design.x = numVal('obj-x');
+            if (!isNaN(numVal('obj-y'))) design.y = numVal('obj-y');
+            updateDesignTransform();
+            renderWorkspace();
+        }));
+        function moveDesignTo(x, y) { design.x = x; design.y = y; updateDesignTransform(); renderWorkspace(); }
+        document.getElementById('btn-obj-board').onclick = () => { const c = boardCenter(); moveDesignTo(Math.round(c.x * 10) / 10, Math.round(c.y * 10) / 10); };
+        document.getElementById('btn-obj-origin').onclick = () => moveDesignTo(0, 0);
+        document.getElementById('btn-fit-view').onclick = fitView;
+
+        // 滑鼠 / 觸控：拖物件、拖右下角縮放、拖空白處平移、滾輪或雙指縮放
+        workspace.addEventListener('wheel', (e) => {
             e.preventDefault();
-            const delta = -e.deltaY;
-            const factor = Math.pow(1.1, delta / 100);
-            const newScale = Math.max(0.05, Math.min(state.scale * factor, 20));
-            
-            const rect = container.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-
-            state.translateX = mouseX - (mouseX - state.translateX) * (newScale / state.scale);
-            state.translateY = mouseY - (mouseY - state.translateY) * (newScale / state.scale);
-            state.scale = newScale;
-            updateTransform();
+            zoomAt(e.clientX, e.clientY, Math.pow(1.1, -e.deltaY / 100));
         }, { passive: false });
 
-        container.addEventListener('pointerdown', (e) => {
-            if (!originalImage) return;
+        workspace.addEventListener('pointerdown', (e) => {
+            drag.pointers.set(e.pointerId, e);
+            workspace.setPointerCapture(e.pointerId);
             pointerDownPos = { x: e.clientX, y: e.clientY };
-            state.evCache.push(e);
-            if (state.evCache.length === 1) {
-                state.isDragging = true;
-                state.lastMouseX = e.clientX;
-                state.lastMouseY = e.clientY;
+            if (drag.pointers.size === 2) {
+                const [a, b] = [...drag.pointers.values()];
+                drag.mode = 'pinch';
+                drag.pinchDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+                return;
             }
-            container.setPointerCapture(e.pointerId);
+            const t = e.target;
+            drag.startClient = { x: e.clientX, y: e.clientY };
+            if (t.id === 'design-handle') {
+                drag.mode = 'resize';
+                drag.orig = { ...designBoxMm(), width: currentWidthMm() };
+            } else if (originalImage && t.closest('#ws-design')) {
+                drag.mode = 'design';
+                drag.orig = { x: design.x, y: design.y };
+            } else {
+                drag.mode = 'pan';
+                drag.orig = { x: view.x, y: view.y };
+            }
         });
 
-        function handlePointerMove(e) {
-            if (!state.isDragging) return;
+        workspace.addEventListener('pointermove', (e) => {
+            if (!drag.pointers.has(e.pointerId) || !drag.mode) return;
+            drag.pointers.set(e.pointerId, e);
 
-            const index = state.evCache.findIndex((ev) => ev.pointerId === e.pointerId);
-            if (index !== -1) {
-                state.evCache[index] = e;
+            if (drag.mode === 'pinch') {
+                const [a, b] = [...drag.pointers.values()];
+                const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+                if (drag.pinchDist > 0) zoomAt((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2, dist / drag.pinchDist);
+                drag.pinchDist = dist;
+                return;
             }
 
-            if (state.evCache.length === 2) {
-                const curDiff = Math.hypot(
-                    state.evCache[0].clientX - state.evCache[1].clientX,
-                    state.evCache[0].clientY - state.evCache[1].clientY
-                );
+            const r = workspace.getBoundingClientRect();
+            const dx = (e.clientX - drag.startClient.x) * view.w / r.width;
+            const dy = (e.clientY - drag.startClient.y) * view.h / r.height;
 
-                if (state.prevDiff > 0) {
-                    const factor = curDiff / state.prevDiff;
-                    const newScale = Math.max(0.05, Math.min(state.scale * factor, 20));
-                    
-                    const rect = container.getBoundingClientRect();
-                    const midX = (state.evCache[0].clientX + state.evCache[1].clientX) / 2 - rect.left;
-                    const midY = (state.evCache[0].clientY + state.evCache[1].clientY) / 2 - rect.top;
-
-                    state.translateX = midX - (midX - state.translateX) * (newScale / state.scale);
-                    state.translateY = midY - (midY - state.translateY) * (newScale / state.scale);
-                    state.scale = newScale;
-                    updateTransform();
-                }
-                state.prevDiff = curDiff;
-            } else if (state.evCache.length === 1) {
-                const deltaX = e.clientX - state.lastMouseX;
-                const deltaY = e.clientY - state.lastMouseY;
-                state.translateX += deltaX;
-                state.translateY += deltaY;
-                state.lastMouseX = e.clientX;
-                state.lastMouseY = e.clientY;
-                updateTransform();
+            if (drag.mode === 'pan') {
+                view.x = drag.orig.x - dx;
+                view.y = drag.orig.y - dy;
+                applyView();
+            } else if (drag.mode === 'design') {
+                moveDesignTo(Math.round((drag.orig.x + dx) * 10) / 10, Math.round((drag.orig.y - dy) * 10) / 10);
+            } else if (drag.mode === 'resize') {
+                // 左上角固定，等比例縮放；拖曳中只改顯示，放開後才重算填滿線
+                const b = drag.orig;
+                const p = toSvg(e.clientX, e.clientY);
+                const ratio = Math.max((p.x - b.left) / b.w, (p.y + b.top) / b.h, 1 / b.w);
+                widthInput.value = (b.width * ratio).toFixed(3);
+                design.x = b.left + b.w * ratio / 2;
+                design.y = b.top - b.h * ratio / 2;
+                updateDesignTransform();
+                renderWorkspace();
             }
-        }
+        });
 
-        function handlePointerUp(e) {
-            const index = state.evCache.findIndex((ev) => ev.pointerId === e.pointerId);
-            if (index !== -1) {
-                state.evCache.splice(index, 1);
-            }
+        function endPointer(e) {
+            if (!drag.pointers.has(e.pointerId)) return;
+            drag.pointers.delete(e.pointerId);
+            const mode = drag.mode;
+            drag.mode = drag.pointers.size === 0 || mode === 'pinch' ? null : mode;
 
-            if (state.evCache.length < 2) {
-                state.prevDiff = -1;
-            }
+            if (mode === 'resize') recomputeFillLines();
 
-            if (state.evCache.length === 0) {
-                state.isDragging = false;
-            } else if (state.evCache.length === 1) {
-                state.lastMouseX = state.evCache[0].clientX;
-                state.lastMouseY = state.evCache[0].clientY;
-            }
-
-            // 當放開點擊且位移極小 (點擊動作而非拖曳平移) 時，觸發個別圖形填滿開關
-            if (fillEnable.checked && pointerDownPos) {
+            // 點一下（沒有拖動）且開啟填滿時，切換該圖形是否填滿
+            if (fillEnable.checked && pointerDownPos && mode !== 'pinch') {
                 const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
                 if (dist < 5) {
                     const elem = document.elementFromPoint(e.clientX, e.clientY);
@@ -872,6 +1362,179 @@
                 }
             }
         }
+        workspace.addEventListener('pointerup', endPointer);
+        workspace.addEventListener('pointercancel', endPointer);
+
+
+        // ===== Z 軸筆觸 =====
+        // Z0 = 筆尖剛好碰到板材；往下為負。筆夾彈簧行程 3.33 mm，壓入深度一律不超過 PEN_MAX_PRESS，
+        // 這個限制在產生 G-code 時強制套用，任何設定都無法超過。
+        const PEN_KEY = 'gordix-pen';
+        const PEN_MAX_PRESS = 2.5;
+        const PEN_MAX_LEVELS = 30;
+        // light / dark 是校準測試檔上的線條編號（從 1 開始）
+        const pen = { on: false, max: 1.6, step: 0.2, lift: 1.0, zFeed: 300, light: 2, dark: 6, wLight: 0.4, wDark: 1.2 };
+        try { Object.assign(pen, JSON.parse(localStorage.getItem(PEN_KEY)) || {}); } catch (e) { }
+
+        function savePen() {
+            try { localStorage.setItem(PEN_KEY, JSON.stringify(pen)); } catch (e) { }
+        }
+
+        // 校準測試的各條深度：0, -step, -2*step ... 到 -max（不超過安全上限）
+        function penLevels() {
+            const max = Math.min(Math.abs(pen.max) || 0, PEN_MAX_PRESS);
+            const step = Math.max(Math.abs(pen.step) || 0.2, 0.05);
+            const n = Math.min(Math.floor(max / step + 1e-9) + 1, PEN_MAX_LEVELS);
+            return Array.from({ length: n }, (_, i) => -Math.round(i * step * 1000) / 1000);
+        }
+
+        function clampZ(z) {
+            return Math.max(z, -PEN_MAX_PRESS);
+        }
+
+        function penLevelZ(num) {
+            const lv = penLevels();
+            return clampZ(lv[Math.min(Math.max(num, 1), lv.length) - 1]);
+        }
+
+        // 灰階深淺 → 深度：null（非灰階）用最細深度；接近白色抬筆；其餘在最細與最粗之間線性換算
+        function zForDark(dark) {
+            const zL = penLevelZ(pen.light), zD = penLevelZ(pen.dark);
+            if (dark === null || dark === undefined) return zL;
+            if (dark < 0.05) return pen.lift;
+            return clampZ(zL + (zD - zL) * dark);
+        }
+
+        // 預覽用：灰階深淺 → 線寬 (mm)
+        function widthForDark(dark) {
+            if (dark === null || dark === undefined) return pen.wLight;
+            return pen.wLight + (pen.wDark - pen.wLight) * dark;
+        }
+
+        // 七段顯示器樣式的單筆畫數字，用來在校準測試上標示每條線的編號
+        const SEG = {
+            a: [[0, 1], [1, 1]], b: [[1, 1], [1, 0.5]], c: [[1, 0.5], [1, 0]], d: [[0, 0], [1, 0]],
+            e: [[0, 0.5], [0, 0]], f: [[0, 1], [0, 0.5]], g: [[0, 0.5], [1, 0.5]]
+        };
+        const DIGIT_SEGS = ['abcdef', 'bc', 'abged', 'abgcd', 'fgbc', 'afgcd', 'afgedc', 'abc', 'abcdefg', 'abcdfg'];
+
+        function generateCalibrationGcode() {
+            const levels = penLevels();
+            const c = (board.on && boardPolygon()) ? boardCenter() : { x: 0, y: 0 };
+            const lineLen = 30, gap = 6, digitW = 2.5, digitH = 4, labelW = 10;
+            const x0 = c.x - (lineLen + labelW) / 2 + labelW;
+            const yTop = c.y + (levels.length - 1) * gap / 2;
+            const labelZ = clampZ(levels.length > 1 ? levels[1] : levels[0]);
+            const f = n => n.toFixed(3);
+            const feed = parseFloat(feedInput.value) || 1500;
+            const lift = Math.max(pen.lift, 0.2);
+
+            const g = [
+                `(Gordix pen calibration: ${levels.length} lines, Z0 = pen tip touching the board)`,
+                `(Pen press limit: ${PEN_MAX_PRESS} mm)`,
+                ...levels.map((z, i) => `(Line ${i + 1}: Z${f(z)})`),
+                'G21', 'G90', `G0 Z${f(lift)}`
+            ];
+            const stroke = (pts, z) => {
+                g.push(`G0 X${f(pts[0][0])} Y${f(pts[0][1])}`);
+                g.push(`G1 Z${f(z)} F${pen.zFeed}`);
+                pts.slice(1).forEach((p, i) => g.push(`G1 X${f(p[0])} Y${f(p[1])}${i === 0 ? ` F${feed}` : ''}`));
+                g.push(`G0 Z${f(lift)}`);
+            };
+
+            levels.forEach((z, i) => {
+                const y = yTop - i * gap;
+                // 編號：最多兩位數，畫在線條左側
+                String(i + 1).split('').forEach((ch, k, all) => {
+                    const dx = x0 - labelW + 1 + (k + (2 - all.length)) * (digitW + 1.2);
+                    DIGIT_SEGS[+ch].split('').forEach(sname => {
+                        stroke(SEG[sname].map(([sx, sy]) => [dx + sx * digitW, y - digitH / 2 + sy * digitH]), labelZ);
+                    });
+                });
+                stroke([[x0, y], [x0 + lineLen, y]], clampZ(z));
+            });
+            g.push('G0 X0 Y0');
+            return g.join('\n');
+        }
+
+        function renderPenPanel() {
+            const d = i18n[currentLang];
+            const lv = penLevels();
+            const set = (id, v) => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = v; };
+            document.getElementById('penz-enable').checked = pen.on;
+            set('penz-max', pen.max); set('penz-step', pen.step); set('penz-lift', pen.lift); set('penz-feed', pen.zFeed);
+            set('penz-wlight', pen.wLight); set('penz-wdark', pen.wDark);
+            const opts = lv.map((z, i) => `<option value="${i + 1}">#${i + 1} (${z.toFixed(2)} mm)</option>`).join('');
+            ['penz-light', 'penz-dark'].forEach(id => { document.getElementById(id).innerHTML = opts; });
+            pen.light = Math.min(pen.light, lv.length);
+            pen.dark = Math.min(pen.dark, lv.length);
+            document.getElementById('penz-light').value = pen.light;
+            document.getElementById('penz-dark').value = pen.dark;
+            document.getElementById('penz-levels').innerText =
+                `${d.penzCount.replace('{n}', lv.length)}: 0 → ${lv[lv.length - 1].toFixed(2)} mm`;
+        }
+
+        function onPenChange() {
+            savePen();
+            renderPenPanel();
+            renderAdvancedState();
+            toggleGrayscalePowerUI();
+            if (originalImage) renderOverlay();
+        }
+
+        const penNum = (id, key, min) => document.getElementById(id).addEventListener('change', () => {
+            const v = parseFloat(document.getElementById(id).value);
+            if (v >= min) pen[key] = v;
+            onPenChange();
+        });
+        penNum('penz-max', 'max', 0.1);
+        penNum('penz-step', 'step', 0.05);
+        penNum('penz-lift', 'lift', 0.2);
+        penNum('penz-feed', 'zFeed', 10);
+        penNum('penz-wlight', 'wLight', 0.05);
+        penNum('penz-wdark', 'wDark', 0.05);
+        document.getElementById('penz-light').onchange = (e) => { pen.light = parseInt(e.target.value, 10); onPenChange(); };
+        document.getElementById('penz-dark').onchange = (e) => { pen.dark = parseInt(e.target.value, 10); onPenChange(); };
+        document.getElementById('penz-enable').onchange = (e) => { pen.on = e.target.checked; onPenChange(); };
+        document.getElementById('btn-penz-download').onclick = () => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([generateCalibrationGcode()], { type: 'text/plain' }));
+            a.download = 'pen_calibration.gcode';
+            a.click();
+        };
+
+        // ===== 進階模式 =====
+        // 只切換顯示；功能是否作用不受影響，所以隱藏時若有進階功能開著，要在下載按鈕上方提醒
+        const ADVANCED_KEY = 'gordix-advanced';
+        const advancedToggle = document.getElementById('advanced-toggle');
+
+        function isAdvanced() {
+            return document.body.classList.contains('show-advanced');
+        }
+
+        function setAdvanced(on) {
+            document.body.classList.toggle('show-advanced', on);
+            try { localStorage.setItem(ADVANCED_KEY, on ? '1' : '0'); } catch (e) { }
+            renderAdvancedState();
+        }
+
+        function renderAdvancedState() {
+            const d = i18n[currentLang];
+            const on = isAdvanced();
+            advancedToggle.innerText = on ? d.advancedOn : d.advancedOff;
+            advancedToggle.className = 'px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-all ' +
+                (on ? 'bg-violet-500 border-violet-300 text-white' : 'bg-white/10 hover:bg-white/20 border-white/20 text-white');
+            const active = [];
+            if (pen.on) active.push(d.penzTitle);
+            if (grayscaleFillCheckbox.checked && fillEnable.checked) active.push(d.labelGrayFill);
+            const notice = document.getElementById('advanced-notice');
+            notice.innerText = `${d.advancedActive}: ${active.join('、')}`;
+            notice.classList.toggle('hidden', on || active.length === 0);
+        }
+
+        advancedToggle.onclick = () => setAdvanced(!isAdvanced());
+        try { document.body.classList.toggle('show-advanced', localStorage.getItem(ADVANCED_KEY) === '1'); } catch (e) { }
+
 
         document.getElementById('btn-select-all-fill').onclick = () => {
             selectedContourIndices = new Set(finalContours.map((_, i) => i));
@@ -882,10 +1545,6 @@
             selectedContourIndices.clear();
             recomputeFillLines();
         };
-
-        container.addEventListener('pointermove', handlePointerMove);
-        window.addEventListener('pointerup', handlePointerUp);
-        window.addEventListener('pointercancel', handlePointerUp);
 
         function updateOutputFormatUI() {
             const isGcode = outputMode === "gcode";
@@ -997,7 +1656,6 @@
             pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
             hatchGroup.innerHTML = '';
             contourGroup.innerHTML = '';
-            gridGroup.innerHTML = '';
             
             finalContours = [];
             finalFillLines = [];
@@ -1008,6 +1666,10 @@
             downloadBtn.disabled = true;
             downloadBtn.className = "w-full py-4 bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-black rounded-xl transition flex flex-col items-center justify-center leading-tight";
             document.getElementById('empty-state').classList.remove('hidden');
+
+            const start = board.on ? boardCenter() : { x: 0, y: 0 };
+            design.x = Math.round(start.x * 10) / 10;
+            design.y = Math.round(start.y * 10) / 10;
 
             fileNameDisplay.innerText = file.name;
             originalFileName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9_\u4e00-\u9fa5]/gi, '_');
@@ -1069,11 +1731,9 @@
                     });
 
                     originalImage = { width: 1000, height: previewCanvas.height };
-                    svgOverlay.setAttribute('viewBox', `0 0 1000 ${previewCanvas.height}`);
                     
                     document.getElementById('empty-state').classList.add('hidden');
                     processImage();
-                    setTimeout(resetView, 50);
                 };
                 reader.readAsText(file);
             } 
@@ -1135,11 +1795,9 @@
                     });
 
                     originalImage = { width: 1000, height: previewCanvas.height }; 
-                    svgOverlay.setAttribute('viewBox', `0 0 1000 ${previewCanvas.height}`);
                     
                     document.getElementById('empty-state').classList.add('hidden');
                     processImage();
-                    setTimeout(resetView, 50);
                 };
                 reader.readAsText(file);
             } else {
@@ -1163,7 +1821,6 @@
                         document.getElementById('empty-state').classList.add('hidden');
                         renderBinary();
                         processImage();
-                        setTimeout(resetView, 50);
                     };
                     img.src = event.target.result;
                 };
@@ -1415,6 +2072,7 @@
             fillGroup.style.pointerEvents = fillEnable.checked ? "auto" : "none";
             legendFillBox.style.display = fillEnable.checked ? "flex" : "none";
             toggleGrayscalePowerUI();
+            renderAdvancedState();
             updateDownloadFileName();
             if (originalImage) {
                 triggerLiveProcess();
@@ -1422,7 +2080,7 @@
         });
 
         function toggleGrayscalePowerUI() {
-            if (grayscaleFillCheckbox.checked && fillEnable.checked) {
+            if (grayscaleFillCheckbox.checked && fillEnable.checked && !pen.on) {
                 grayscalePowerContainer.classList.remove('hidden');
             } else {
                 grayscalePowerContainer.classList.add('hidden');
@@ -1443,7 +2101,6 @@
                 data[i+3] = 255;
             }
             pCtx.putImageData(imageData, 0, 0);
-            svgOverlay.setAttribute('viewBox', `0 0 ${previewCanvas.width} ${previewCanvas.height}`);
         }
 
         function simplifyPath(pts, epsilon) {
@@ -1566,54 +2223,6 @@
             return lines;
         }
 
-        function renderGrid(w, h, mmToPx) {
-            if (!gridGroup) return;
-            gridGroup.innerHTML = '';
-            if (!originalImage || isNaN(mmToPx) || mmToPx <= 0) return;
-
-            const gridSpacingPx = 50 * mmToPx; 
-            if (gridSpacingPx <= 5) return; 
-
-            const centerX = w / 2;
-            const centerY = h / 2;
-
-            const isDark = document.documentElement.classList.contains('dark');
-            const lineStroke = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(15, 23, 42, 0.08)';
-            const axisStroke = isDark ? 'rgba(239, 68, 68, 0.35)' : 'rgba(220, 38, 38, 0.4)';
-            const textFill = isDark ? 'rgba(255, 255, 255, 0.35)' : 'rgba(15, 23, 42, 0.45)';
-            const centerTextFill = isDark ? 'rgba(248, 113, 113, 0.8)' : 'rgba(220, 38, 38, 0.8)';
-
-            let gridLines = [];
-
-            for (let x = centerX, idx = 0; x < w; x += gridSpacingPx, idx++) {
-                const isMainAxis = (idx === 0);
-                gridLines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="${isMainAxis ? axisStroke : lineStroke}" stroke-width="${isMainAxis ? 1.5 : 0.8}" ${isMainAxis ? '' : 'stroke-dasharray="4,4"'} />`);
-                if (idx > 0) {
-                    gridLines.push(`<text x="${x + 4}" y="${centerY - 6}" fill="${textFill}" font-size="9" font-family="monospace">${idx * 50}mm</text>`);
-                }
-            }
-            for (let x = centerX - gridSpacingPx, idx = 1; x >= 0; x -= gridSpacingPx, idx++) {
-                gridLines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${h}" stroke="${lineStroke}" stroke-width="0.8" stroke-dasharray="4,4" />`);
-                gridLines.push(`<text x="${x + 4}" y="${centerY - 6}" fill="${textFill}" font-size="9" font-family="monospace">-${idx * 50}mm</text>`);
-            }
-
-            for (let y = centerY, idx = 0; y < h; y += gridSpacingPx, idx++) {
-                const isMainAxis = (idx === 0);
-                gridLines.push(`<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="${isMainAxis ? axisStroke : lineStroke}" stroke-width="${isMainAxis ? 1.5 : 0.8}" ${isMainAxis ? '' : 'stroke-dasharray="4,4"'} />`);
-                if (idx > 0) {
-                    gridLines.push(`<text x="${centerX + 4}" y="${y - 4}" fill="${textFill}" font-size="9" font-family="monospace">-${idx * 50}mm</text>`);
-                }
-            }
-            for (let y = centerY - gridSpacingPx, idx = 1; y >= 0; y -= gridSpacingPx, idx++) {
-                gridLines.push(`<line x1="0" y1="${y}" x2="${w}" y2="${y}" stroke="${lineStroke}" stroke-width="0.8" stroke-dasharray="4,4" />`);
-                gridLines.push(`<text x="${centerX + 4}" y="${y - 4}" fill="${textFill}" font-size="9" font-family="monospace">${idx * 50}mm</text>`);
-            }
-
-            gridLines.push(`<text x="${centerX + 4}" y="${centerY - 6}" fill="${centerTextFill}" font-weight="bold" font-size="10" font-family="monospace">X0 Y0</text>`);
-
-            gridGroup.innerHTML = gridLines.join('');
-        }
-
         async function processImage() {
             document.getElementById('loading-spinner').classList.remove('hidden');
             await new Promise(r => setTimeout(r, 50));
@@ -1640,7 +2249,6 @@
                 const isDarkTheme = document.documentElement.classList.contains('dark');
                 pCtx.fillStyle = isDarkTheme ? "#0f172a" : "#ffffff"; 
                 pCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
-                svgOverlay.setAttribute('viewBox', `0 0 1000 ${previewCanvas.height}`);
 
                 const mmToPx = 1000 / targetW_mm;
                 const segPx = parseFloat(segmentSlider.value) * mmToPx;
@@ -1689,6 +2297,10 @@
                 }
             }
             
+            designImage.setAttribute('href', previewCanvas.toDataURL());
+            designImage.setAttribute('width', previewCanvas.width);
+            designImage.setAttribute('height', previewCanvas.height);
+
             // 保留使用者先前的點選選擇，如無選擇則預設全選
             if (!selectedContourIndices || selectedContourIndices.size === 0) {
                 selectedContourIndices = new Set(finalContours.map((_, i) => i));
@@ -1731,6 +2343,7 @@
                 
                 const pts = [p1];
                 const powers = [];
+                const darks = [];
                 
                 if (isGrayscale && originalPixelData) {
                     let currentDist = 0;
@@ -1761,20 +2374,23 @@
                         
                         pts.push(ptEnd);
                         powers.push(power);
+                        darks.push(1 - gray / 255);
                         currentDist = nextDist;
                     }
                 } else {
                     pts.push(p2);
                     powers.push(255);
+                    darks.push(null);
                 }
                 
                 if (pts.length > 1) {
-                    finalFillLines.push({ pts: pts, powers: powers });
+                    finalFillLines.push({ pts: pts, powers: powers, darks: darks });
                 }
             });
 
             renderOverlay();
-            renderGrid(previewCanvas.width, previewCanvas.height, currentScale);
+            updateDesignTransform();
+            renderWorkspace();
             updateStats(previewCanvas.width, previewCanvas.height);
             
             if (finalContours.length > 0 || finalFillLines.length > 0) {
@@ -1793,15 +2409,23 @@
             const maxS = parseFloat(maxSPowerInput.value) || 255;
             const sRange = (maxS - minS) || 1;
 
+            const k = mmPerPx();
             finalFillLines.forEach(line => {
                 for (let i = 0; i < line.powers.length; i++) {
                     const pStart = line.pts[i];
                     const pEnd = line.pts[i+1];
+                    if (pen.on) {
+                        // 以校準的線寬畫出筆觸粗細；抬筆的段落不畫
+                        const dark = line.darks ? line.darks[i] : null;
+                        if (zForDark(dark) > 0) continue;
+                        hatchHtml += `<line x1="${pStart.x}" y1="${pStart.y}" x2="${pEnd.x}" y2="${pEnd.y}" stroke="#3b82f6" stroke-width="${widthForDark(dark) / k}" stroke-linecap="round" opacity="0.85" />`;
+                        continue;
+                    }
                     const power = line.powers[i];
                     
                     const normalizedPower = (power - minS) / sRange;
                     const alpha = 0.15 + 0.85 * Math.max(0, Math.min(1, normalizedPower));
-                    hatchHtml += `<line x1="${pStart.x}" y1="${pStart.y}" x2="${pEnd.x}" y2="${pEnd.y}" stroke="#3b82f6" stroke-width="1.2" opacity="${alpha}" />`;
+                    hatchHtml += `<line x1="${pStart.x}" y1="${pStart.y}" x2="${pEnd.x}" y2="${pEnd.y}" stroke="#3b82f6" stroke-width="1.2" opacity="${alpha}" vector-effect="non-scaling-stroke" />`;
                 }
             });
             hatchGroup.innerHTML = hatchHtml;
@@ -1816,7 +2440,7 @@
                 const cursor = fillEnable.checked ? "pointer" : "default";
                 const d = `M ${p[0].x} ${p[0].y} ${p.slice(1).map(pt => `L ${pt.x} ${pt.y}`).join(' ')} Z`;
                 
-                return `<path d="${d}" data-index="${idx}" fill="${fillColor}" stroke="${strokeColor}" stroke-width="${showFillBg ? 1.8 : 1.2}" style="pointer-events: ${pointerEvents}; cursor: ${cursor}; transition: all 0.15s;" class="hover:stroke-amber-400 hover:stroke-2 hover:fill-amber-400/20" />`;
+                return `<path d="${d}" data-index="${idx}" fill="${fillColor}" stroke="${strokeColor}" ${pen.on ? `stroke-width="${pen.wLight / mmPerPx()}"` : `stroke-width="${showFillBg ? 1.8 : 1.2}" vector-effect="non-scaling-stroke"`} style="pointer-events: ${pointerEvents}; cursor: ${cursor}; transition: all 0.15s;" class="hover:stroke-amber-400 hover:stroke-2 hover:fill-amber-400/20" />`;
             }).join('');
 
             updateLayerVisibility();
@@ -1835,6 +2459,7 @@
             if (minX !== Infinity) {
                 document.getElementById('coord-range').innerText = 
                     `${d.statsPrefix}: ${Math.abs(maxX-minX).toFixed(1)} x ${Math.abs(maxY-minY).toFixed(1)} mm\n` +
+                    `${d.statsPos}: X${design.x.toFixed(1)} Y${design.y.toFixed(1)} mm\n` +
                     `${d.statsContours}: ${finalContours.length}\n` +
                     `${d.statsLines}: ${finalFillLines.length}`;
             } else {
@@ -1861,21 +2486,26 @@
             
             const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
 
-            const tx = x => (x - midX).toFixed(3);
-            const ty = y => (midY - (y * scale) + yOffset).toFixed(3); 
+            const tx = x => (x - midX + design.x).toFixed(3);
+            const ty = y => (midY - (y * scale) + yOffset + design.y).toFixed(3); 
 
             let g = [
                 `(Generated by Draw Converter)`, 
                 `(Tool: ${dPen === 0 ? 'Laser' : 'Pen Body ' + dPen + 'mm'})`, 
                 `(Y Offset Applied: ${yOffset.toFixed(3)}mm)`,
+                `(Object Center: X${design.x.toFixed(3)} Y${design.y.toFixed(3)}, origin = machine center)`,
                 `G21`, 
                 `G90`, 
                 `G1 F${feed}`
             ];
+            if (pen.on) {
+                g.splice(4, 0, `(Pen Z mode: light Z${penLevelZ(pen.light).toFixed(3)}, dark Z${penLevelZ(pen.dark).toFixed(3)}, lift Z${pen.lift.toFixed(3)}, press limit ${PEN_MAX_PRESS}mm)`);
+                g.push(`G0 Z${pen.lift.toFixed(3)}`);
+            }
 
             let allPaths = [];
             finalContours.forEach(path => allPaths.push({ pts: path, isClosed: true, isHatch: false }));
-            finalFillLines.forEach(line => allPaths.push({ pts: line.pts, powers: line.powers, isClosed: false, isHatch: true }));
+            finalFillLines.forEach(line => allPaths.push({ pts: line.pts, powers: line.powers, darks: line.darks, isClosed: false, isHatch: true }));
 
             let cx = 0, cy = 0; 
 
@@ -1904,7 +2534,20 @@
 
                 g.push(`G0 X${tx(pts[0].x * scale)} Y${ty(pts[0].y)}`);
 
-                if (target.isHatch && powers) {
+                if (pen.on) {
+                    // Z 軸筆觸：輪廓與一般填滿用最細深度；灰階填滿逐段依深淺換算深度，接近白色時抬筆
+                    const darks = target.isHatch && target.darks ? (reversePath ? [...target.darks].reverse() : target.darks) : null;
+                    const zs = darks ? darks.map(zForDark) : null;
+                    g.push(`G1 Z${(zs ? zs[0] : zForDark(null)).toFixed(3)} F${pen.zFeed}`);
+                    for (let i = 1; i < pts.length; i++) {
+                        const z = zs ? ` Z${zs[i - 1].toFixed(3)}` : '';
+                        g.push(`G1 X${tx(pts[i].x * scale)} Y${ty(pts[i].y)}${z}${i === 1 ? ` F${feed}` : ''}`);
+                    }
+                    if (target.isClosed) {
+                        g.push(`G1 X${tx(pts[0].x * scale)} Y${ty(pts[0].y)}`);
+                    }
+                    g.push(`G0 Z${pen.lift.toFixed(3)}`);
+                } else if (target.isHatch && powers) {
                     // 灰階動態功率漸變填滿
                     g.push(`M03 S${powers[0]}`);
                     for (let i = 1; i < pts.length; i++) {
@@ -1921,7 +2564,7 @@
                     }
                 }
 
-                g.push("M05");
+                if (!pen.on) g.push("M05");
 
                 cx = parseFloat(tx(pts[pts.length - 1].x * scale));
                 cy = parseFloat(ty(pts[pts.length - 1].y));
@@ -1975,7 +2618,7 @@
         };
 
         const resizeObserver = new ResizeObserver(() => {
-            if (originalImage) resetView();
+            fitView();
         });
         resizeObserver.observe(container);
 
@@ -1995,6 +2638,7 @@
         updateUI();
         toggleGrayscalePowerUI();
         updateDownloadFileName();
+        fitView();
     </script>
     <script>
         if ('serviceWorker' in navigator) {
