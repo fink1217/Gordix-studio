@@ -21,9 +21,21 @@ const GordixTable = (() => {
         }
     }
 
+    // 儲存目前編輯中的值；保留上次下載 table.cfg 時的快照（configured）
     function save(tables, currentId) {
+        const prev = load();
+        write({ tables, currentId, savedAt: Date.now(), configured: prev ? prev.configured : undefined });
+    }
+
+    // 使用者下載 table.cfg 時呼叫：記下實際交給機器的設定，首頁據此判斷「工作台已設定」
+    function markConfigured(tables, currentId) {
+        const snapshot = JSON.parse(JSON.stringify(tables));
+        write({ tables, currentId, savedAt: Date.now(), configured: { tables: snapshot, currentId, at: Date.now() } });
+    }
+
+    function write(data) {
         try {
-            localStorage.setItem(KEY, JSON.stringify({ tables, currentId, savedAt: Date.now() }));
+            localStorage.setItem(KEY, JSON.stringify(data));
         } catch (e) { /* 無痕模式等無法儲存的情況，下次開啟會回到預設值 */ }
     }
 
@@ -70,5 +82,5 @@ const GordixTable = (() => {
         return Math.hypot(s1.x, s1.y) <= Math.hypot(s2.x, s2.y) ? s1 : s2;
     }
 
-    return { DEFAULTS, load, save, workRange, corners, locate };
+    return { DEFAULTS, load, save, markConfigured, workRange, corners, locate };
 })();

@@ -21,6 +21,27 @@
             transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease, box-shadow 0.3s ease;
         }
     </style>
+    <style type="text/tailwindcss">
+        /* 步驟之間的連接線；已完成的步驟改為綠色 */
+        .step { @apply relative; }
+        .step:not(:last-child)::before {
+            content: ""; @apply absolute left-[19px] top-11 -bottom-5 w-0.5 bg-slate-200 dark:bg-slate-700;
+        }
+        .step.step-done:not(:last-child)::before { @apply bg-green-600; }
+        .step-dot { @apply shrink-0 w-10 h-10 rounded-full flex items-center justify-center font-black; }
+        .step-dot-idle { @apply bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700; }
+        .step-dot-active { @apply bg-orange-500 text-white ring-4 ring-orange-500/30; }
+        .step-dot-done { @apply bg-green-600 text-white; }
+        .step-dot-warn { @apply bg-amber-500 text-white ring-4 ring-amber-500/30; }
+        .step-card { @apply flex-1 min-w-0 rounded-xl border p-5; }
+        .step-card-idle { @apply border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30; }
+        .step-card-active { @apply border-orange-500 bg-orange-500/5; }
+        .step-card-warn { @apply border-amber-500 bg-amber-500/5; }
+        .step-label { @apply text-xs font-bold text-slate-400; }
+        .step-title { @apply text-lg font-bold text-slate-900 dark:text-white; }
+        .step-badge { @apply text-xs font-bold px-2 py-1 rounded; }
+        .tool-choice { @apply block rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/50 p-4 transition; }
+    </style>
         <!-- PWA Meta Tags -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
@@ -50,86 +71,108 @@
                     </svg>
                 </button>
                 <!-- 語系切換 -->
-                <button onclick="toggleLanguage()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all flex items-center gap-2">
+                <button onclick="toggleLanguage()" class="whitespace-nowrap px-3 py-1.5 rounded-lg text-xs font-bold bg-white/5 hover:bg-white/10 text-white border border-white/10 transition-all flex items-center gap-2">
                     <span id="lang-text">中文 / EN</span>
                 </button>
             </div>
         </div>
 
-        <!-- 主內容區域: 6 個功能卡片佈局 -->
-        <main class="p-6 md:p-12">
-            <!-- 採用 flex-wrap 在寬螢幕下自動排成完美對稱的 3x2 格局 -->
-            <div class="flex flex-wrap justify-center gap-6 w-full">
-                
-                <!-- Tool 1: 桌長配置 (灰色) -->
-                <a href="table_conf.html" class="group w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] max-w-sm bg-slate-50 dark:bg-slate-800/40 p-8 rounded-xl border border-slate-200 dark:border-slate-800/80 flex flex-col items-center justify-center text-center transition-all duration-200 hover:-translate-y-1 hover:border-slate-400 dark:hover:border-slate-500 hover:shadow-lg">
-                    <div class="w-14 h-14 bg-slate-200 dark:bg-slate-800 rounded-xl mb-5 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-slate-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(148,163,184,0.4)] transition-all duration-200">
-                        <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M3 13h2v-2H3v2zm0 4h2v-2H3v2zm0-8h2V7H3v2zm4 4h14v-2H7v2zm0 4h14v-2H7v2zM7 7v2h14V7H7z"/>
-                        </svg>
-                    </div>
-                    <h3 data-zh="桌長參數配置產生器" data-en="Table Configurator" class="text-lg font-bold text-slate-900 dark:text-white mb-2 transition-colors">桌長配置產生器</h3>
-                    <p data-zh="系統配置參數快速生成" data-en="Generate system config parameters" class="text-sm text-slate-500 dark:text-slate-400">系統配置參數快速生成</p>
-                </a>
+        <!-- 主內容區域：依加工流程排列的步驟，參考資料放右側 -->
+        <main class="p-6 md:p-10 grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <section class="lg:col-span-2">
+                <h2 data-zh="加工流程" data-en="Workflow" class="text-xl font-black text-slate-900 dark:text-white">加工流程</h2>
+                <p data-zh="依序完成以下步驟，即可產生上機用的檔案。" data-en="Follow these steps to produce files for the machine." class="text-sm text-slate-500 dark:text-slate-400 mt-1 mb-6">依序完成以下步驟，即可產生上機用的檔案。</p>
 
-                <!-- Tool 2: 轉檔工具(切割) (橘色) -->
-                <a href="CNC.html" class="group w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] max-w-sm bg-slate-50 dark:bg-slate-800/40 p-8 rounded-xl border border-slate-200 dark:border-slate-800/80 flex flex-col items-center justify-center text-center transition-all duration-200 hover:-translate-y-1 hover:border-orange-500 dark:hover:border-orange-500 hover:shadow-lg">
-                    <div class="w-14 h-14 bg-slate-200 dark:bg-slate-800 rounded-xl mb-5 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-orange-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(249,115,22,0.4)] transition-all duration-200">
-                        <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M11 2h2v3h-2zm-2 4h6v1.5H9zm0 3.5l6-1.5v1.5l-6 1.5zm0 3.5l6-1.5v1.5l-6 1.5zm1 3l2 3 2-3z"/>
-                        </svg>
-                    </div>
-                    <h3 data-zh="轉檔工具 (切割)" data-en="Cut Converter" class="text-lg font-bold text-slate-900 dark:text-white mb-2 transition-colors">轉檔工具 (切割)</h3>
-                    <p data-zh="CNC與雷射切割專用" data-en="Optimized for CNC and laser cutting" class="text-sm text-slate-500 dark:text-slate-400">CNC與雷射切割專用</p>
-                </a>
+                <ol class="space-y-5">
+                    <!-- 步驟 1：量測工作台（狀態由 JS 依是否下載過 table.cfg 決定） -->
+                    <li id="step-1" class="step">
+                        <div class="flex gap-4">
+                            <div id="step-1-dot" class="step-dot"></div>
+                            <div id="step-1-card" class="step-card">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                        <div data-zh="步驟 1" data-en="Step 1" class="step-label">步驟 1</div>
+                                        <h3 data-zh="量測工作台尺寸" data-en="Measure the table" class="step-title">量測工作台尺寸</h3>
+                                    </div>
+                                    <span id="step-1-badge" class="step-badge"></span>
+                                </div>
+                                <p id="step-1-desc" class="text-sm text-slate-500 dark:text-slate-400 mt-2"></p>
+                                <a href="table_conf.html" id="step-1-btn" class="inline-block mt-4 px-4 py-2 rounded-lg text-sm font-bold"></a>
+                            </div>
+                        </div>
+                    </li>
 
-                <!-- Tool 3: 轉檔工具(繪圖) (藍色) -->
-                <a href="draw.html" class="group w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] max-w-sm bg-slate-50 dark:bg-slate-800/40 p-8 rounded-xl border border-slate-200 dark:border-slate-800/80 flex flex-col items-center justify-center text-center transition-all duration-200 hover:-translate-y-1 hover:border-blue-500 dark:hover:border-blue-500 hover:shadow-lg">
-                    <div class="w-14 h-14 bg-slate-200 dark:bg-slate-800 rounded-xl mb-5 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-blue-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(59,130,246,0.4)] transition-all duration-200">
-                        <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4-1.79-4-4-4zm0 6c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zM11 2v4h2V2h-2zm0 16v4h2v-4h-2zm11-7h-4v2h4v-2zM6 11H2v2h4v-2z"/>
-                        </svg>
-                    </div>
-                    <h3 data-zh="轉檔工具 (繪圖)" data-en="Draw Converter" class="text-lg font-bold text-slate-900 dark:text-white mb-2 transition-colors">轉檔工具 (繪圖)</h3>
-                    <p data-zh="雷射雕刻與繪圖專用" data-en="Optimized for plotter and laser engraving" class="text-sm text-slate-500 dark:text-slate-400">雷射雕刻與繪圖專用</p>
-                </a>
+                    <!-- 步驟 2：選擇加工方式 -->
+                    <li id="step-2" class="step">
+                        <div class="flex gap-4">
+                            <div id="step-2-dot" class="step-dot">2</div>
+                            <div id="step-2-card" class="step-card">
+                                <div class="flex flex-wrap items-start justify-between gap-3">
+                                    <div>
+                                        <div data-zh="步驟 2" data-en="Step 2" class="step-label">步驟 2</div>
+                                        <h3 data-zh="選擇加工方式，轉成 G-code" data-en="Choose a process and convert to G-code" class="step-title">選擇加工方式，轉成 G-code</h3>
+                                    </div>
+                                    <span id="step-2-badge" data-zh="下一步" data-en="Next" class="step-badge bg-orange-500 text-white">下一步</span>
+                                </div>
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4">
+                                    <a href="CNC.html" class="group tool-choice hover:border-orange-500">
+                                        <div data-zh="切割" data-en="Cut" class="font-bold text-slate-900 dark:text-white group-hover:text-orange-500">切割</div>
+                                        <div data-zh="CNC、雷射切割" data-en="CNC, laser cutting" class="text-xs text-slate-500 dark:text-slate-400 mt-1">CNC、雷射切割</div>
+                                    </a>
+                                    <a href="draw.html" class="group tool-choice hover:border-blue-500">
+                                        <div data-zh="繪圖 / 雷雕" data-en="Draw / Engrave" class="font-bold text-slate-900 dark:text-white group-hover:text-blue-500">繪圖 / 雷雕</div>
+                                        <div data-zh="繪圖筆、雷射雕刻" data-en="Pen plotting, laser engraving" class="text-xs text-slate-500 dark:text-slate-400 mt-1">繪圖筆、雷射雕刻</div>
+                                    </a>
+                                    <a href="vc.html" class="group tool-choice hover:border-red-500">
+                                        <div data-zh="V 雕刻" data-en="V-Carving" class="font-bold text-slate-900 dark:text-white group-hover:text-red-500">V 雕刻</div>
+                                        <div data-zh="圖片、向量、灰階浮雕" data-en="Images, vectors, relief" class="text-xs text-slate-500 dark:text-slate-400 mt-1">圖片、向量、灰階浮雕</div>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </li>
 
-                <!-- Tool 4: V雕刻 (紅色) -->
-                <a href="vc.html" class="group w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] max-w-sm bg-slate-50 dark:bg-slate-800/40 p-8 rounded-xl border border-slate-200 dark:border-slate-800/80 flex flex-col items-center justify-center text-center transition-all duration-200 hover:-translate-y-1 hover:border-red-500 dark:hover:border-red-500 hover:shadow-lg">
-                    <div class="w-14 h-14 bg-slate-200 dark:bg-slate-800 rounded-xl mb-5 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-red-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(239,68,68,0.4)] transition-all duration-200">
-                        <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M3 5h4l5 10 5-10h4L12 19z"/>
-                        </svg>
-                    </div>
-                    <h3 data-zh="V 雕刻" data-en="V-Carving" class="text-lg font-bold text-slate-900 dark:text-white mb-2 transition-colors">V 雕刻</h3>
-                    <p data-zh="提供圖片或向量轉V-carving用gcode" data-en="Convert images or vectors to V-carving G-code" class="text-sm text-slate-500 dark:text-slate-400">提供圖片或向量轉V-carving用gcode</p>
-                </a>
+                    <!-- 步驟 3：檢查與微調（選用） -->
+                    <li class="step">
+                        <div class="flex gap-4">
+                            <div class="step-dot step-dot-idle">3</div>
+                            <div class="step-card step-card-idle">
+                                <div data-zh="步驟 3 · 選用" data-en="Step 3 · Optional" class="step-label">步驟 3 · 選用</div>
+                                <h3 data-zh="檢查與微調 G-code" data-en="Check and fine-tune G-code" class="step-title">檢查與微調 G-code</h3>
+                                <p data-zh="預覽刀具路徑，必要時即時修改數值。轉完檔也可以直接跳到步驟 4。" data-en="Preview the toolpath and adjust values if needed. You can also go straight to step 4." class="text-sm text-slate-500 dark:text-slate-400 mt-2">預覽刀具路徑，必要時即時修改數值。轉完檔也可以直接跳到步驟 4。</p>
+                                <a href="Gcodetrans.html" data-zh="開啟 G-code 調整" data-en="Open G-code adjuster" class="inline-block mt-4 px-4 py-2 rounded-lg text-sm font-bold border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800">開啟 G-code 調整</a>
+                            </div>
+                        </div>
+                    </li>
 
-                <!-- Tool 5: Gcode (綠色) -->
-                <a href="Gcodetrans.html" class="group w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] max-w-sm bg-slate-50 dark:bg-slate-800/40 p-8 rounded-xl border border-slate-200 dark:border-slate-800/80 flex flex-col items-center justify-center text-center transition-all duration-200 hover:-translate-y-1 hover:border-green-500 dark:hover:border-green-500 hover:shadow-lg">
-                    <div class="w-14 h-14 bg-slate-200 dark:bg-slate-800 rounded-xl mb-5 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-green-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(34,197,94,0.4)] transition-all duration-200">
-                        <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/>
-                        </svg>
-                    </div>
-                    <h3 data-zh="Gcode 即時調整" data-en="Gcode Real-time Adjuster" class="text-lg font-bold text-slate-900 dark:text-white mb-2 transition-colors">Gcode 即時調整</h3>
-                    <p data-zh="即時編輯與校正 Gcode 內容" data-en="Live Gcode editing and correction" class="text-sm text-slate-500 dark:text-slate-400">即時編輯與校正 Gcode 內容</p>
-                </a>
+                    <!-- 步驟 4：上機 -->
+                    <li class="step">
+                        <div class="flex gap-4">
+                            <div class="step-dot step-dot-idle">4</div>
+                            <div class="step-card step-card-idle">
+                                <div data-zh="步驟 4" data-en="Step 4" class="step-label">步驟 4</div>
+                                <h3 data-zh="上機加工" data-en="Run on the machine" class="step-title">上機加工</h3>
+                                <p data-zh="將 table.cfg 與 G-code 存到 SD 卡，插入機器後開始加工。" data-en="Copy table.cfg and the G-code to the SD card, insert it into the machine, and start." class="text-sm text-slate-500 dark:text-slate-400 mt-2">將 table.cfg 與 G-code 存到 SD 卡，插入機器後開始加工。</p>
+                            </div>
+                        </div>
+                    </li>
+                </ol>
+            </section>
 
-                <!-- Tool 6: 參數指南 (紫色) -->
-                <a href="params.html" class="group w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)] max-w-sm bg-slate-50 dark:bg-slate-800/40 p-8 rounded-xl border border-slate-200 dark:border-slate-800/80 flex flex-col items-center justify-center text-center transition-all duration-200 hover:-translate-y-1 hover:border-purple-500 dark:hover:border-purple-500 hover:shadow-lg">
-                    <div class="w-14 h-14 bg-slate-200 dark:bg-slate-800 rounded-xl mb-5 flex items-center justify-center text-slate-500 dark:text-slate-400 group-hover:bg-purple-500 group-hover:text-white group-hover:shadow-[0_0_15px_rgba(168,85,247,0.4)] transition-all duration-200">
-                        <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-                            <!-- 工藝開書 (Open Book) 向量圖標 -->
-                            <path d="M12 4.5C10.55 3.42 8.35 3 6 3c-2.2 0-4.3.42-6 1.5v15c1.7-1.08 3.8-1.5 6-1.5 2.35 0 4.55.42 6 1.5 1.45-1.08 3.65-1.5 6-1.5 2.2 0 4.3.42 6 1.5v-15c-1.7-1.08-3.8-1.5-6-1.5-2.35 0-4.55.42-6 1.5zM11 17.5c-1.45-1.08-3.65-1.5-6-1.5-1.5 0-2.85.2-4 .5V6c1.15-.3 2.5-.5 4-.5 2.2 0 4.3.42 6 1.5v10.5zm12-11.5v10.5c-1.15-.3-2.5-.5-4-.5-2.35 0-4.55.42-6 1.5V7.5c1.45-1.08 3.65-1.5 6-1.5 1.5 0 2.85.2 4 .5z"/>
-                        </svg>
-                    </div>
-                    <h3 data-zh="參數指南" data-en="Parameter Guide" class="text-lg font-bold text-slate-900 dark:text-white mb-2 transition-colors">參數指南</h3>
-                    <p data-zh="各類材料加工參數建議與快速查詢" data-en="Processing parameters & reference guide for materials" class="text-sm text-slate-500 dark:text-slate-400">各類材料加工參數建議與快速查詢</p>
+            <!-- 參考資料：不屬於流程，隨時可查 -->
+            <aside class="space-y-4">
+                <h2 data-zh="參考資料" data-en="Reference" class="text-sm font-black text-slate-500 dark:text-slate-400 tracking-wider">參考資料</h2>
+                <a href="params.html" class="block rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/30 p-5 hover:border-purple-500 transition">
+                    <div data-zh="參數指南" data-en="Parameter Guide" class="font-bold text-slate-900 dark:text-white">參數指南</div>
+                    <div data-zh="各類材料加工參數建議與快速查詢" data-en="Processing parameters & reference guide for materials" class="text-xs text-slate-500 dark:text-slate-400 mt-1">各類材料加工參數建議與快速查詢</div>
                 </a>
-
-            </div>
+                <div class="rounded-xl border border-slate-200 dark:border-slate-800 p-5 text-sm">
+                    <div data-zh="目前工作台" data-en="Current table" class="font-bold text-slate-900 dark:text-white mb-2">目前工作台</div>
+                    <div id="table-summary" class="text-slate-500 dark:text-slate-400"></div>
+                </div>
+            </aside>
         </main>
+
 
         <!-- Footer -->
         <footer class="bg-slate-50 dark:bg-slate-900/50 p-6 text-center text-xs text-slate-500 dark:text-slate-500 border-t border-slate-100 dark:border-slate-800/60 theme-transition">
@@ -137,6 +180,7 @@
         </footer>
     </div>
 
+    <script src="gordix-table.js"></script>
     <script>
         // 設定全域變數，並以您指定的規格做為預設值
         let currentLang = 'zh';
@@ -160,6 +204,8 @@
                 el.textContent = el.getAttribute(`data-${currentLang}`);
             });
 
+            renderSteps();
+
             const btn = document.getElementById('lang-text');
             if (btn) {
                 btn.textContent = currentLang === 'zh' ? '中文 / EN' : 'EN / 中文';
@@ -170,6 +216,69 @@
             currentLang = currentLang === 'zh' ? 'en' : 'zh';
             applyLanguage();
             localStorage.setItem('gordix-lang', currentLang);
+        }
+
+        // ===== 步驟狀態 =====
+        // 下載過 table.cfg 才算「工作台已設定」；下載後又改過尺寸則提醒重新下載
+        const STEP_TEXT = {
+            zh: {
+                start: '從這裡開始', done: '已設定', changed: '有未下載的修改',
+                startDesc: '第一次使用，或更換了工作台時，請先量測桌面四邊與對角線長度，產生 table.cfg。',
+                doneDesc: '沒有更換工作台的話，可以直接進行步驟 2。',
+                changedDesc: '上次下載 table.cfg 之後尺寸有修改，請重新下載，並更新 SD 卡上的 table.cfg。',
+                startBtn: '開始量測 →', doneBtn: '重新量測 / 修改', changedBtn: '前往重新下載 →',
+                table: '工作台', range: '加工範圍', unset: '尚未設定'
+            },
+            en: {
+                start: 'Start here', done: 'Done', changed: 'Changes not downloaded',
+                startDesc: 'First time, or changed the table? Measure the four sides and the diagonal to generate table.cfg.',
+                doneDesc: 'If the table has not changed, go straight to step 2.',
+                changedDesc: 'The size changed after you last downloaded table.cfg. Download it again and update table.cfg on the SD card.',
+                startBtn: 'Start measuring →', doneBtn: 'Re-measure / edit', changedBtn: 'Go download again →',
+                table: 'Table', range: 'Work range', unset: 'Not set'
+            }
+        };
+
+        function renderSteps() {
+            const t = STEP_TEXT[currentLang] || STEP_TEXT.zh;
+            const saved = GordixTable.load();
+            const cfg = saved && saved.configured;
+            const changed = !!cfg && (JSON.stringify(saved.tables) !== JSON.stringify(cfg.tables) || saved.currentId !== cfg.currentId);
+            const state = !cfg ? 'start' : changed ? 'changed' : 'done';
+            const $ = id => document.getElementById(id);
+
+            const s1 = {
+                start: { dot: 'step-dot-active', dotText: '1', card: 'step-card-active', badge: 'bg-orange-500 text-white', btn: 'bg-orange-500 text-white hover:bg-orange-400' },
+                done: { dot: 'step-dot-done', dotText: '✓', card: 'step-card-idle', badge: 'bg-green-600/20 text-green-600 dark:text-green-400', btn: 'border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800' },
+                changed: { dot: 'step-dot-warn', dotText: '!', card: 'step-card-warn', badge: 'bg-amber-500 text-white', btn: 'bg-amber-500 text-white hover:bg-amber-400' }
+            }[state];
+            $('step-1').className = 'step' + (state === 'done' ? ' step-done' : '');
+            $('step-1-dot').className = 'step-dot ' + s1.dot;
+            $('step-1-dot').textContent = s1.dotText;
+            $('step-1-card').className = 'step-card ' + s1.card;
+            $('step-1-badge').className = 'step-badge ' + s1.badge;
+            $('step-1-badge').textContent = t[state];
+            $('step-1-btn').className = 'inline-block mt-4 px-4 py-2 rounded-lg text-sm font-bold ' + s1.btn;
+            $('step-1-btn').textContent = t[state + 'Btn'];
+
+            // 工作台已設定（含有未下載修改）時，下一步就是步驟 2
+            const step2Active = state !== 'start';
+            $('step-2-dot').className = 'step-dot ' + (step2Active ? 'step-dot-active' : 'step-dot-idle');
+            $('step-2-card').className = 'step-card ' + (step2Active ? 'step-card-active' : 'step-card-idle');
+            $('step-2-badge').style.display = step2Active ? '' : 'none';
+
+            const desc = $('step-1-desc');
+            const summary = $('table-summary');
+            if (!cfg) {
+                desc.textContent = t.startDesc;
+                summary.innerHTML = `<span class="text-orange-500 font-bold">${t.unset}</span>`;
+                return;
+            }
+            const d = cfg.tables[cfg.currentId];
+            const r = GordixTable.workRange(d);
+            const line = `${t.table} ${cfg.currentId} · ${d.S} × ${d.W} mm · ${t.range} ${r.x * 2} × ${r.y * 2} mm`;
+            desc.innerHTML = `${line}<br><span class="text-slate-400 dark:text-slate-500">${state === 'changed' ? t.changedDesc : t.doneDesc}</span>`;
+            summary.innerHTML = `${t.table} ${cfg.currentId}<br><span class="font-mono text-slate-800 dark:text-slate-200">${d.S} × ${d.W} mm</span><br>${t.range} ${r.x * 2} × ${r.y * 2} mm`;
         }
 
         // 主題載入、儲存與套用
@@ -226,6 +335,9 @@
                     currentTheme = e.newValue;
                     applyTheme();
                 }
+            }
+            if (e.key === 'gordix-tables') {
+                renderSteps();
             }
             if (e.key === 'gordix-lang') {
                 if (e.newValue) {

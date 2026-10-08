@@ -925,6 +925,8 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url; a.download = 'table.cfg'; a.click();
+            // 記下交給機器的設定，首頁據此顯示「工作台已設定」
+            GordixTable.markConfigured(allTables, currentTableId);
             URL.revokeObjectURL(url);
         }
 
