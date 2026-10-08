@@ -262,6 +262,9 @@
             transition: color 0.3s ease;
         }
 
+        /* 進階功能：沒有開啟進階模式時隱藏（與轉檔工具共用同一個開關） */
+        body:not(.show-advanced) [data-advanced] { display: none !important; }
+
         /* 捲軸美化 */
         ::-webkit-scrollbar {
             width: 6px;
@@ -307,6 +310,8 @@
                         <!-- SVG path 由 JS 動態注入 -->
                     </svg>
                 </button>
+                <!-- 進階功能開關 -->
+                <button id="advanced-toggle" onclick="setAdvanced(!document.body.classList.contains('show-advanced'))" class="px-3 py-1.5 rounded-lg text-[13px] font-bold border transition-all"></button>
                 <!-- 語言切換 -->
                 <button onclick="toggleLang()" class="px-4 py-1.5 rounded-lg text-[13px] font-bold bg-white/10 hover:bg-white/20 text-white border border-white/10 transition-all flex items-center justify-center gap-2">
                     <span>中文 / EN</span>
@@ -372,7 +377,9 @@
                         </div>
                     </div>
                     
-                    <div class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-700/50">
+                    <!-- 比例不是 1 但進階收起來時，提醒使用者這個值仍會寫進 table.cfg -->
+                    <div id="scale-notice" class="hidden mt-4 text-[11px] font-bold text-violet-400"></div>
+                    <div data-advanced class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-700/50">
                         <div>
                             <label id="ui-scaleX" class="block text-[10px] md:text-xs font-bold text-muted-custom uppercase mb-1">Scale X</label>
                             <input type="number" id="valX" step="0.0001" class="w-full bg-input-custom border border-input-custom p-2 rounded font-mono text-custom outline-none focus:ring-2 focus:ring-slate-500" oninput="updateCurrentTableData(false)">
@@ -441,6 +448,9 @@
                 sideW: "側邊W",
                 sideE: "側邊E",
                 sideD: "對角D",
+                advancedOff: "進階",
+                advancedOn: "進階 ✓",
+                scaleNotice: "進階設定作用中（已隱藏）：比例 X {x}、比例 Y {y}",
                 legendCenter: "機器中心",
                 legendFront: "機器前側",
                 legendFacing: "前側朝向 S 邊放置",
@@ -460,6 +470,9 @@
                 sideW: "Side W",
                 sideE: "Side E",
                 sideD: "Diagonal D",
+                advancedOff: "Advanced",
+                advancedOn: "Advanced ✓",
+                scaleNotice: "Advanced settings active (hidden): Scale X {x}, Scale Y {y}",
                 legendCenter: "Machine center",
                 legendFront: "Machine front",
                 legendFacing: "Front faces side S",
@@ -531,6 +544,28 @@
             applyTheme(currentTheme);
 
             renderTableList();
+            renderAdvancedState();
+        }
+
+        const ADVANCED_KEY = 'gordix-advanced';
+
+        function setAdvanced(on) {
+            document.body.classList.toggle('show-advanced', on);
+            try { localStorage.setItem(ADVANCED_KEY, on ? '1' : '0'); } catch (e) { }
+            renderAdvancedState();
+        }
+
+        function renderAdvancedState() {
+            const t = i18n[currentLang];
+            const on = document.body.classList.contains('show-advanced');
+            const btn = document.getElementById('advanced-toggle');
+            btn.innerText = on ? t.advancedOn : t.advancedOff;
+            btn.className = 'px-3 py-1.5 rounded-lg text-[13px] font-bold border transition-all ' +
+                (on ? 'bg-violet-500 border-violet-300 text-white' : 'bg-white/10 hover:bg-white/20 border-white/10 text-white');
+            const d = allTables[currentTableId];
+            const notice = document.getElementById('scale-notice');
+            notice.innerText = t.scaleNotice.replace('{x}', d.X).replace('{y}', d.Y);
+            notice.classList.toggle('hidden', on || (d.X === 1 && d.Y === 1));
         }
 
         function renderTableList() {
@@ -566,6 +601,7 @@
             document.getElementById('valY').value = data.Y;
             renderTableList();
             draw();
+            renderAdvancedState();
             GordixTable.save(allTables, currentTableId);
         }
 
@@ -909,6 +945,8 @@
                 currentTheme = 'dark'; // 預設深色模式
                 localStorage.setItem('gordix-theme', 'dark');
             }
+
+            try { document.body.classList.toggle('show-advanced', localStorage.getItem(ADVANCED_KEY) === '1'); } catch (e) { }
 
             // 載入上次的工作台設定，讓轉檔工具與這裡看到同一份資料
             const saved = GordixTable.load();
