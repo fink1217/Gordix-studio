@@ -1,0 +1,74 @@
+// 工作台資料：桌長配置產生器與各轉檔工具共用。
+// 尺寸單位一律為 mm；座標原點為機器中心（工作台中心）。
+const GordixTable = (() => {
+    const KEY = 'gordix-tables';
+
+    const DEFAULTS = {
+        1: { E: 1460, S: 2560, W: 1460, N: 2560, D: 2947, X: 1.000, Y: 1.000 },
+        2: { E: 1460, S: 1340, W: 1460, N: 1340, D: 1982, X: 1.000, Y: 1.000 },
+        3: { E: 1440, S: 1320, W: 1440, N: 1320, D: 1953, X: 1.000, Y: 1.000 },
+        4: { E: 840, S: 1320, W: 840, N: 1320, D: 1565, X: 1.000, Y: 1.000 },
+        5: { E: 840, S: 720, W: 840, N: 720, D: 1106, X: 1.000, Y: 1.000 }
+    };
+
+    // 讀取使用者存過的設定；沒有存過或資料損毀時回傳 null
+    function load() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(KEY));
+            return saved && saved.tables ? saved : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function save(tables, currentId) {
+        try {
+            localStorage.setItem(KEY, JSON.stringify({ tables, currentId, savedAt: Date.now() }));
+        } catch (e) { /* 無痕模式等無法儲存的情況，下次開啟會回到預設值 */ }
+    }
+
+    // 機器可到達的加工座標範圍 (±x, ±y)，X 沿 S/N 邊，Y 沿 W/E 邊
+    function workRange(d) {
+        const tan15 = Math.tan(15 * Math.PI / 180);
+        const x = 100 + d.S / 2 - (d.W - 240) / 2 * tan15;
+        const y = 100 + d.W / 2 - (d.S - 240) / 2 * tan15;
+        return {
+            x: Math.round(Math.min(x, d.S / 2 - 140)),
+            y: Math.round(Math.min(y, d.W / 2 - 140))
+        };
+    }
+
+    // 四個角落治具的位置（機器座標 mm：原點為 NW–SE 對角線中點，+X 沿 S 邊朝 E，+Y 朝 N）。
+    // 計算方式與桌長配置產生器的畫圖相同：由四邊長與對角線 D 推出四邊形。
+    function corners(d) {
+        const cosT = Math.max(-1, Math.min(1, (d.W * d.W + d.S * d.S - d.D * d.D) / (2 * d.W * d.S || 1)));
+        const theta = Math.acos(cosT);
+        // 先在「S 邊為底、y 朝下」的座標算，最後再換成機器座標
+        const BL = { x: 0, y: 0 };
+        const BR = { x: d.S, y: 0 };
+        const TL = { x: d.W * Math.cos(theta), y: -d.W * Math.sin(theta) };
+        const angleD = Math.atan2(BR.y - TL.y, BR.x - TL.x);
+        const cosP = Math.max(-1, Math.min(1, (d.N * d.N + d.D * d.D - d.E * d.E) / (2 * d.N * d.D || 1)));
+        const phi = Math.acos(cosP);
+        const TR = { x: TL.x + d.N * Math.cos(angleD - phi), y: TL.y + d.N * Math.sin(angleD - phi) };
+        const cx = (TL.x + BR.x) / 2, cy = (TL.y + BR.y) / 2;
+        const m = p => ({ x: p.x - cx, y: -(p.y - cy) });
+        return { NW: m(TL), NE: m(TR), SE: m(BR), SW: m(BL) };
+    }
+
+    // 三角定位：已知兩個治具位置與到某點的直線距離 r1、r2，求該點。
+    // 兩圓有兩個交點，取比較靠近工作台中心（原點）的那個；量不出交點時回傳 null。
+    function locate(p1, p2, r1, r2) {
+        const dx = p2.x - p1.x, dy = p2.y - p1.y;
+        const d = Math.hypot(dx, dy);
+        if (!(r1 > 0 && r2 > 0 && d > 0) || d > r1 + r2 || d < Math.abs(r1 - r2)) return null;
+        const a = (r1 * r1 - r2 * r2 + d * d) / (2 * d);
+        const h = Math.sqrt(Math.max(0, r1 * r1 - a * a));
+        const mx = p1.x + a * dx / d, my = p1.y + a * dy / d;
+        const s1 = { x: mx - h * dy / d, y: my + h * dx / d };
+        const s2 = { x: mx + h * dy / d, y: my - h * dx / d };
+        return Math.hypot(s1.x, s1.y) <= Math.hypot(s2.x, s2.y) ? s1 : s2;
+    }
+
+    return { DEFAULTS, load, save, workRange, corners, locate };
+})();
