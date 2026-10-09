@@ -1983,6 +1983,21 @@
             });
         }
 
+        // 加工順序：雷射先做（不破壞板面）；銑削由機器中心往外。
+        // 機器靠 8 條皮帶拉在四角治具之間、騎在板材上移動，在中央最穩；先銑中間再往外，
+        // 機器前緣面對的才是完整板面，不會一頭撞進剛銑好的槽。
+        // 被包住的圖形離中心的最遠距離不會超過外框，所以孔仍然會在外輪廓之前切。
+        function cuttingOrder(activeParts) {
+            const stage = { pocket: 0, inner: 1, outer: 2 };
+            const farRadius = p => p.toolpath.reduce((m, path) => path.reduce((mm, pt) => Math.max(mm, Math.hypot(pt.x, pt.y)), m), 0);
+            return activeParts
+                .map(p => ({ p, laser: p.jobConfig.type === 'laser', r: farRadius(p) }))
+                .sort((a, b) => (b.laser - a.laser) || (a.r - b.r)
+                    || ((b.p.nestingDepth || 0) - (a.p.nestingDepth || 0))
+                    || ((stage[a.p.jobConfig.type] ?? 9) - (stage[b.p.jobConfig.type] ?? 9)))
+                .map(k => k.p);
+        }
+
         function updateStats() {
             let totalSec = 0;
             let currentX = 0, currentY = 0;
@@ -1998,167 +2013,116 @@
                 return;
             }
 
-            const orderPriority = { "laser": 0, "pocket": 1, "inner": 2, "outer": 3 };
-            const grouped = {};
-            activeParts.forEach(p => {
-                const type = p.jobConfig.type;
-                if (!grouped[type]) grouped[type] = [];
-                grouped[type].push(p);
-            });
+            cuttingOrder(activeParts).forEach(p => {
+                const cfg = p.jobConfig;
+                const isLaser = cfg.type === 'laser';
+                const passes = isLaser ? 1 : Math.ceil(cfg.depth / cfg.step);
+                const cuttingFeedrate = cfg.f || 1000; 
 
-            const sortedTypes = Object.keys(grouped).sort((a, b) => (orderPriority[a] ?? 99) - (orderPriority[b] ?? 99));
+                let lastPointOfPart = null;
 
-            sortedTypes.forEach(type => {
-                let unvisitedInGroup = [...grouped[type]];
-                
-                unvisitedInGroup.forEach(p => {
-                    if (p.nestingDepth === undefined) p.nestingDepth = 0;
+                let phases = [];
+                if (cfg.type === 'pocket') {
+                    phases = [
+                        { paths: p.pocketScanPaths || [], isContour: false },
+                        { paths: p.pocketContourPaths || [], isContour: true }
+                    ];
+                } else {
+                    phases = [
+                        { paths: p.toolpath || [], isContour: (cfg.type === 'outer' || cfg.type === 'inner') }
+                    ];
+                }
+
+                phases.forEach(phase => {
+                    if (phase.paths.length === 0) return;
+                    for (let i = 1; i <= passes; i++) {
+                        const targetZ = isLaser ? 0 : -(Math.min(cfg.depth, i * cfg.step));
+                        let lastPtInLayer = null;
+
+                        phase.paths.forEach((path, pathIdx) => {
+                            if (path.length < 2) return;
+                            
+                            const useTabThisPass = (!isLaser && cfg.useTab && i === passes && phase.isContour);
+                            const tabLength = 6 + (cfg.d || 0); // TAB 移動長度 = 6mm + 刀具直徑
+                            const tabCenters = useTabThisPass ? getTabPointsForPath(path) : [];
+                            // 採用智慧型局部細分
+                            const finalPath = useTabThisPass ? insertTabsIntoPath(path, tabCenters, tabLength) : path;
+                            const tabZVal = useTabThisPass ? Math.min(0, targetZ + cfg.step) : targetZ;
+
+                            const start = finalPath[0];
+                            const startZ = useTabThisPass && isPointInTab(start, tabCenters, tabLength) ? tabZVal : targetZ;
+
+                            let needRetract = true;
+                            if (i > 1 && pathIdx === 0 && lastPointOfPart) {
+                                const dToStart = Math.sqrt(Math.pow(start.x - lastPointOfPart.x, 2) + Math.pow(start.y - lastPointOfPart.y, 2));
+                                if (dToStart < 0.5) needRetract = false; 
+                            } else if (lastPtInLayer) {
+                                const dToLast = Math.sqrt(Math.pow(start.x - lastPtInLayer.x, 2) + Math.pow(start.y - lastPtInLayer.y, 2));
+                                // 只有挖槽的掃描線之間可以不抬刀直接連過去；輪廓之間一律抬刀，避免切過不該切的材料
+                                if (!phase.isContour && dToLast <= cfg.d) needRetract = false;
+                            }
+
+                            if (needRetract) {
+                                if (!isLaser) {
+                                    const travelZToSafe = Math.abs(currentZ - SAFE_Z_VAL);
+                                    totalSec += (travelZToSafe / G0_SPEED) * 60;
+                                    currentZ = SAFE_Z_VAL;
+                                }
+
+                                const travelXY = Math.sqrt(Math.pow(start.x - currentX, 2) + Math.pow(start.y - currentY, 2));
+                                totalSec += (travelXY / G0_SPEED) * 60;
+                                currentX = start.x;
+                                currentY = start.y;
+
+                                if (!isLaser) {
+                                    const plungeZ = Math.abs(currentZ - startZ);
+                                    totalSec += (plungeZ / PLUNGE_SPEED) * 60;
+                                    currentZ = startZ;
+                                }
+                            } else {
+                                if (!isLaser) {
+                                    const plungeZ = Math.abs(currentZ - startZ);
+                                    totalSec += (plungeZ / PLUNGE_SPEED) * 60;
+                                    currentZ = startZ;
+                                }
+                                const travelXY = Math.sqrt(Math.pow(start.x - currentX, 2) + Math.pow(start.y - currentY, 2));
+                                totalSec += (travelXY / cuttingFeedrate) * 60;
+                                currentX = start.x;
+                                currentY = start.y;
+                            }
+
+                            let lastZ = startZ;
+                            for (let j = 1; j < finalPath.length; j++) {
+                                const pt = finalPath[j];
+                                const ptZ = useTabThisPass && isPointInTab(pt, tabCenters, tabLength) ? tabZVal : targetZ;
+                                const segmentDist = Math.sqrt(Math.pow(pt.x - finalPath[j - 1].x, 2) + Math.pow(pt.y - finalPath[j - 1].y, 2));
+                                const zDist = Math.abs(ptZ - lastZ);
+                                
+                                const totalTravel = Math.sqrt(segmentDist * segmentDist + zDist * zDist);
+                                totalSec += (totalTravel / cuttingFeedrate) * 60;
+                                lastZ = ptZ;
+                            }
+
+                            const lastPtInPath = finalPath[finalPath.length - 1];
+                            currentX = lastPtInPath.x;
+                            currentY = lastPtInPath.y;
+                            currentZ = useTabThisPass && isPointInTab(lastPtInPath, tabCenters, tabLength) ? tabZVal : targetZ;
+
+                            lastPtInLayer = lastPtInPath;
+                            lastPointOfPart = lastPtInPath;
+                        });
+                    }
                 });
 
-                while (unvisitedInGroup.length > 0) {
-                    let maxRemainingDepth = -1;
-                    unvisitedInGroup.forEach(p => {
-                        if (p.nestingDepth > maxRemainingDepth) maxRemainingDepth = p.nestingDepth;
-                    });
+                if (!isLaser) {
+                    const travelZToSafe = Math.abs(currentZ - SAFE_Z_VAL);
+                    totalSec += (travelZToSafe / G0_SPEED) * 60;
+                    currentZ = SAFE_Z_VAL;
+                }
 
-                    let nearestIdx = -1;
-                    let minDistSq = Infinity;
-                    for (let i = 0; i < unvisitedInGroup.length; i++) {
-                        const p = unvisitedInGroup[i];
-                        if (p.nestingDepth !== maxRemainingDepth) continue;
-
-                        const firstPath = p.toolpath[0];
-                        if (!firstPath || firstPath.length === 0) continue;
-                        const dx = firstPath[0].x - currentX;
-                        const dy = firstPath[0].y - currentY;
-                        const distSq = dx * dx + dy * dy;
-                        if (distSq < minDistSq) { minDistSq = distSq; nearestIdx = i; }
-                    }
-
-                    if (nearestIdx === -1) {
-                        for (let i = 0; i < unvisitedInGroup.length; i++) {
-                            const firstPath = unvisitedInGroup[i].toolpath[0];
-                            if (!firstPath || firstPath.length === 0) continue;
-                            const dx = firstPath[0].x - currentX;
-                            const dy = firstPath[0].y - currentY;
-                            const distSq = dx * dx + dy * dy;
-                            if (distSq < minDistSq) { minDistSq = distSq; nearestIdx = i; }
-                        }
-                    }
-
-                    if (nearestIdx === -1) break;
-
-                    const p = unvisitedInGroup.splice(nearestIdx, 1)[0];
-                    const cfg = p.jobConfig;
-                    const isLaser = cfg.type === 'laser';
-                    const passes = isLaser ? 1 : Math.ceil(cfg.depth / cfg.step);
-                    const cuttingFeedrate = cfg.f || 1000; 
-
-                    let lastPointOfPart = null;
-
-                    let phases = [];
-                    if (cfg.type === 'pocket') {
-                        phases = [
-                            { paths: p.pocketScanPaths || [], isContour: false },
-                            { paths: p.pocketContourPaths || [], isContour: true }
-                        ];
-                    } else {
-                        phases = [
-                            { paths: p.toolpath || [], isContour: (cfg.type === 'outer' || cfg.type === 'inner') }
-                        ];
-                    }
-
-                    phases.forEach(phase => {
-                        if (phase.paths.length === 0) return;
-                        for (let i = 1; i <= passes; i++) {
-                            const targetZ = isLaser ? 0 : -(Math.min(cfg.depth, i * cfg.step));
-                            let lastPtInLayer = null;
-
-                            phase.paths.forEach((path, pathIdx) => {
-                                if (path.length < 2) return;
-                                
-                                const useTabThisPass = (!isLaser && cfg.useTab && i === passes && phase.isContour);
-                                const tabLength = 6 + (cfg.d || 0); // TAB 移動長度 = 6mm + 刀具直徑
-                                const tabCenters = useTabThisPass ? getTabPointsForPath(path) : [];
-                                // 採用智慧型局部細分
-                                const finalPath = useTabThisPass ? insertTabsIntoPath(path, tabCenters, tabLength) : path;
-                                const tabZVal = useTabThisPass ? Math.min(0, targetZ + cfg.step) : targetZ;
-
-                                const start = finalPath[0];
-                                const startZ = useTabThisPass && isPointInTab(start, tabCenters, tabLength) ? tabZVal : targetZ;
-
-                                let needRetract = true;
-                                if (i > 1 && pathIdx === 0 && lastPointOfPart) {
-                                    const dToStart = Math.sqrt(Math.pow(start.x - lastPointOfPart.x, 2) + Math.pow(start.y - lastPointOfPart.y, 2));
-                                    if (dToStart < 0.5) needRetract = false; 
-                                } else if (lastPtInLayer) {
-                                    const dToLast = Math.sqrt(Math.pow(start.x - lastPtInLayer.x, 2) + Math.pow(start.y - lastPtInLayer.y, 2));
-                                    // 只有挖槽的掃描線之間可以不抬刀直接連過去；輪廓之間一律抬刀，避免切過不該切的材料
-                                    if (!phase.isContour && dToLast <= cfg.d) needRetract = false;
-                                }
-
-                                if (needRetract) {
-                                    if (!isLaser) {
-                                        const travelZToSafe = Math.abs(currentZ - SAFE_Z_VAL);
-                                        totalSec += (travelZToSafe / G0_SPEED) * 60;
-                                        currentZ = SAFE_Z_VAL;
-                                    }
-
-                                    const travelXY = Math.sqrt(Math.pow(start.x - currentX, 2) + Math.pow(start.y - currentY, 2));
-                                    totalSec += (travelXY / G0_SPEED) * 60;
-                                    currentX = start.x;
-                                    currentY = start.y;
-
-                                    if (!isLaser) {
-                                        const plungeZ = Math.abs(currentZ - startZ);
-                                        totalSec += (plungeZ / PLUNGE_SPEED) * 60;
-                                        currentZ = startZ;
-                                    }
-                                } else {
-                                    if (!isLaser) {
-                                        const plungeZ = Math.abs(currentZ - startZ);
-                                        totalSec += (plungeZ / PLUNGE_SPEED) * 60;
-                                        currentZ = startZ;
-                                    }
-                                    const travelXY = Math.sqrt(Math.pow(start.x - currentX, 2) + Math.pow(start.y - currentY, 2));
-                                    totalSec += (travelXY / cuttingFeedrate) * 60;
-                                    currentX = start.x;
-                                    currentY = start.y;
-                                }
-
-                                let lastZ = startZ;
-                                for (let j = 1; j < finalPath.length; j++) {
-                                    const pt = finalPath[j];
-                                    const ptZ = useTabThisPass && isPointInTab(pt, tabCenters, tabLength) ? tabZVal : targetZ;
-                                    const segmentDist = Math.sqrt(Math.pow(pt.x - finalPath[j - 1].x, 2) + Math.pow(pt.y - finalPath[j - 1].y, 2));
-                                    const zDist = Math.abs(ptZ - lastZ);
-                                    
-                                    const totalTravel = Math.sqrt(segmentDist * segmentDist + zDist * zDist);
-                                    totalSec += (totalTravel / cuttingFeedrate) * 60;
-                                    lastZ = ptZ;
-                                }
-
-                                const lastPtInPath = finalPath[finalPath.length - 1];
-                                currentX = lastPtInPath.x;
-                                currentY = lastPtInPath.y;
-                                currentZ = useTabThisPass && isPointInTab(lastPtInPath, tabCenters, tabLength) ? tabZVal : targetZ;
-
-                                lastPtInLayer = lastPtInPath;
-                                lastPointOfPart = lastPtInPath;
-                            });
-                        }
-                    });
-
-                    if (!isLaser) {
-                        const travelZToSafe = Math.abs(currentZ - SAFE_Z_VAL);
-                        totalSec += (travelZToSafe / G0_SPEED) * 60;
-                        currentZ = SAFE_Z_VAL;
-                    }
-
-                    if (lastPointOfPart) {
-                        currentX = lastPointOfPart.x;
-                        currentY = lastPointOfPart.y;
-                    }
+                if (lastPointOfPart) {
+                    currentX = lastPointOfPart.x;
+                    currentY = lastPointOfPart.y;
                 }
             });
 
@@ -2176,182 +2140,134 @@
             if(parts.length === 0) return;
             let gc = ["; CNC V4.0", "; Spindle is manual: turn it on before starting", "G21", "G90", `G0 Z${(parseFloat(SAFE_Z) || 2.0).toFixed(3)}`, "G0 X0 Y0"];
             
-            const orderPriority = { "laser": 0, "pocket": 1, "inner": 2, "outer": 3 };
             let activeParts = parts.filter(p => p.visible && p.toolpath && p.toolpath.length > 0);
             if (activeParts.length === 0) return;
-            const grouped = {};
-            activeParts.forEach(p => {
-                const type = p.jobConfig.type;
-                if (!grouped[type]) grouped[type] = [];
-                grouped[type].push(p);
-            });
             let currentX = 0, currentY = 0;
             let currentZ = parseFloat(SAFE_Z) || 2.0; 
             const SAFE_Z_VAL = parseFloat(SAFE_Z) || 2.0;
             let currentG1F = null; 
             
-            const sortedTypes = Object.keys(grouped).sort((a, b) => (orderPriority[a] ?? 99) - (orderPriority[b] ?? 99));
-            sortedTypes.forEach(type => {
-                let unvisitedInGroup = [...grouped[type]];
-                
-                unvisitedInGroup.forEach(p => {
-                    if (p.nestingDepth === undefined) p.nestingDepth = 0;
-                });
+            cuttingOrder(activeParts).forEach(p => {
+                const cfg = p.jobConfig, isLaser = cfg.type === 'laser', passes = isLaser ? 1 : Math.ceil(cfg.depth / cfg.step);
+                let lastPointOfPart = null;
 
-                while (unvisitedInGroup.length > 0) {
-                    let maxRemainingDepth = -1;
-                    unvisitedInGroup.forEach(p => {
-                        if (p.nestingDepth > maxRemainingDepth) maxRemainingDepth = p.nestingDepth;
-                    });
+                let phases = [];
+                if (cfg.type === 'pocket') {
+                    phases = [
+                        { paths: p.pocketScanPaths || [], isContour: false },
+                        { paths: p.pocketContourPaths || [], isContour: true }
+                    ];
+                } else {
+                    phases = [
+                        { paths: p.toolpath || [], isContour: (cfg.type === 'outer' || cfg.type === 'inner') }
+                    ];
+                }
 
-                    let nearestIdx = -1;
-                    let minDistSq = Infinity;
-                    for (let i = 0; i < unvisitedInGroup.length; i++) {
-                        const p = unvisitedInGroup[i];
-                        if (p.nestingDepth !== maxRemainingDepth) continue;
+                phases.forEach(phase => {
+                    if (phase.paths.length === 0) return;
+                    for (let i = 1; i <= passes; i++) {
+                        const targetZ = isLaser ? 0 : -(Math.min(cfg.depth, i * cfg.step)).toFixed(3);
+                        let lastPtInLayer = null;
+                        phase.paths.forEach((path, pathIdx) => {
+                            if (path.length < 2) return;
+                            
+                            const useTabThisPass = (!isLaser && cfg.useTab && i === passes && phase.isContour);
+                            const tabLength = 6 + (cfg.d || 0); // TAB 移動長度 = 6mm + 刀具直徑
+                            const tabCenters = useTabThisPass ? getTabPointsForPath(path) : [];
+                            // 智慧型局部細分演算法
+                            const finalPath = useTabThisPass ? insertTabsIntoPath(path, tabCenters, tabLength) : path;
+                            const tabZVal = useTabThisPass ? Math.min(0, targetZ + cfg.step) : targetZ;
 
-                        const firstPath = p.toolpath[0];
-                        if (!firstPath || firstPath.length === 0) continue;
-                        const dx = firstPath[0].x - currentX;
-                        const dy = firstPath[0].y - currentY;
-                        const distSq = dx * dx + dy * dy;
-                        if (distSq < minDistSq) { minDistSq = distSq; nearestIdx = i; }
-                    }
+                            const start = finalPath[0];
+                            const startZ = useTabThisPass && isPointInTab(start, tabCenters, tabLength) ? tabZVal : targetZ;
 
-                    if (nearestIdx === -1) {
-                        for (let i = 0; i < unvisitedInGroup.length; i++) {
-                            const firstPath = unvisitedInGroup[i].toolpath[0];
-                            if (!firstPath || firstPath.length === 0) continue;
-                            const dx = firstPath[0].x - currentX;
-                            const dy = firstPath[0].y - currentY;
-                            const distSq = dx * dx + dy * dy;
-                            if (distSq < minDistSq) { minDistSq = distSq; nearestIdx = i; }
-                        }
-                    }
-
-                    if (nearestIdx === -1) break;
-                    const p = unvisitedInGroup.splice(nearestIdx, 1)[0];
-                    const cfg = p.jobConfig, isLaser = cfg.type === 'laser', passes = isLaser ? 1 : Math.ceil(cfg.depth / cfg.step);
-                    let lastPointOfPart = null;
-
-                    let phases = [];
-                    if (cfg.type === 'pocket') {
-                        phases = [
-                            { paths: p.pocketScanPaths || [], isContour: false },
-                            { paths: p.pocketContourPaths || [], isContour: true }
-                        ];
-                    } else {
-                        phases = [
-                            { paths: p.toolpath || [], isContour: (cfg.type === 'outer' || cfg.type === 'inner') }
-                        ];
-                    }
-
-                    phases.forEach(phase => {
-                        if (phase.paths.length === 0) return;
-                        for (let i = 1; i <= passes; i++) {
-                            const targetZ = isLaser ? 0 : -(Math.min(cfg.depth, i * cfg.step)).toFixed(3);
-                            let lastPtInLayer = null;
-                            phase.paths.forEach((path, pathIdx) => {
-                                if (path.length < 2) return;
-                                
-                                const useTabThisPass = (!isLaser && cfg.useTab && i === passes && phase.isContour);
-                                const tabLength = 6 + (cfg.d || 0); // TAB 移動長度 = 6mm + 刀具直徑
-                                const tabCenters = useTabThisPass ? getTabPointsForPath(path) : [];
-                                // 智慧型局部細分演算法
-                                const finalPath = useTabThisPass ? insertTabsIntoPath(path, tabCenters, tabLength) : path;
-                                const tabZVal = useTabThisPass ? Math.min(0, targetZ + cfg.step) : targetZ;
-
-                                const start = finalPath[0];
-                                const startZ = useTabThisPass && isPointInTab(start, tabCenters, tabLength) ? tabZVal : targetZ;
-
-                                let needRetract = true;
-                                if (i > 1 && pathIdx === 0 && lastPointOfPart) {
-                                    const dToStart = Math.sqrt(Math.pow(start.x - lastPointOfPart.x, 2) + Math.pow(start.y - lastPointOfPart.y, 2));
-                                    if (dToStart < 0.5) needRetract = false; 
-                                } else if (lastPtInLayer) {
-                                    const dToLast = Math.sqrt(Math.pow(start.x - lastPtInLayer.x, 2) + Math.pow(start.y - lastPtInLayer.y, 2));
-                                    // 只有挖槽的掃描線之間可以不抬刀直接連過去；輪廓之間一律抬刀，避免切過不該切的材料
-                                    if (!phase.isContour && dToLast <= cfg.d) needRetract = false;
-                                }
-                                
-                                if (needRetract) {
-                                    if (!isLaser) {
-                                        if (Math.abs(currentZ - SAFE_Z_VAL) > 0.001) {
-                                            gc.push(`G0 Z${SAFE_Z_VAL.toFixed(3)}`);
-                                            currentZ = SAFE_Z_VAL;
-                                        }
+                            let needRetract = true;
+                            if (i > 1 && pathIdx === 0 && lastPointOfPart) {
+                                const dToStart = Math.sqrt(Math.pow(start.x - lastPointOfPart.x, 2) + Math.pow(start.y - lastPointOfPart.y, 2));
+                                if (dToStart < 0.5) needRetract = false; 
+                            } else if (lastPtInLayer) {
+                                const dToLast = Math.sqrt(Math.pow(start.x - lastPtInLayer.x, 2) + Math.pow(start.y - lastPtInLayer.y, 2));
+                                // 只有挖槽的掃描線之間可以不抬刀直接連過去；輪廓之間一律抬刀，避免切過不該切的材料
+                                if (!phase.isContour && dToLast <= cfg.d) needRetract = false;
+                            }
+                            
+                            if (needRetract) {
+                                if (!isLaser) {
+                                    if (Math.abs(currentZ - SAFE_Z_VAL) > 0.001) {
+                                        gc.push(`G0 Z${SAFE_Z_VAL.toFixed(3)}`);
+                                        currentZ = SAFE_Z_VAL;
                                     }
-                                    gc.push(`G0 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}`);
-                                    if (!isLaser) {
-                                        if (Math.abs(currentZ - startZ) > 0.001) {
-                                            const fStr = (currentG1F !== 300) ? " F300" : "";
-                                            gc.push(`G1 Z${startZ.toFixed(3)}${fStr}`);
-                                            currentZ = startZ;
-                                            currentG1F = 300;
-                                        }
-                                    } else {
-                                        gc.push("M03 S255"); 
+                                }
+                                gc.push(`G0 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}`);
+                                if (!isLaser) {
+                                    if (Math.abs(currentZ - startZ) > 0.001) {
+                                        const fStr = (currentG1F !== 300) ? " F300" : "";
+                                        gc.push(`G1 Z${startZ.toFixed(3)}${fStr}`);
+                                        currentZ = startZ;
+                                        currentG1F = 300;
                                     }
                                 } else {
-                                    if (!isLaser) {
-                                        if (Math.abs(currentZ - startZ) > 0.001) {
-                                            const fStr = (currentG1F !== 300) ? " F300" : "";
-                                            gc.push(`G1 Z${startZ.toFixed(3)}${fStr}`);
-                                            currentZ = startZ;
-                                            currentG1F = 300;
-                                        }
-                                        const fStr = (currentG1F !== cfg.f) ? ` F${cfg.f}` : "";
-                                        gc.push(`G1 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}${fStr}`);
-                                        if (fStr) currentG1F = cfg.f;
-                                    } else {
-                                        gc.push("M03 S255"); 
-                                        const fStr = (currentG1F !== cfg.f) ? ` F${cfg.f}` : "";
-                                        gc.push(`G1 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}${fStr}`);
-                                        if (fStr) currentG1F = cfg.f;
-                                    }
+                                    gc.push("M03 S255"); 
                                 }
-                                
-                                let lastZ = startZ;
-                                for (let j = 1; j < finalPath.length; j++) {
-                                    const pt = finalPath[j];
-                                    const ptZ = useTabThisPass && isPointInTab(pt, tabCenters, tabLength) ? tabZVal : targetZ;
+                            } else {
+                                if (!isLaser) {
+                                    if (Math.abs(currentZ - startZ) > 0.001) {
+                                        const fStr = (currentG1F !== 300) ? " F300" : "";
+                                        gc.push(`G1 Z${startZ.toFixed(3)}${fStr}`);
+                                        currentZ = startZ;
+                                        currentG1F = 300;
+                                    }
                                     const fStr = (currentG1F !== cfg.f) ? ` F${cfg.f}` : "";
-                                    
-                                    if (Math.abs(ptZ - lastZ) > 0.001) {
+                                    gc.push(`G1 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}${fStr}`);
+                                    if (fStr) currentG1F = cfg.f;
+                                } else {
+                                    gc.push("M03 S255"); 
+                                    const fStr = (currentG1F !== cfg.f) ? ` F${cfg.f}` : "";
+                                    gc.push(`G1 X${start.x.toFixed(3)} Y${start.y.toFixed(3)}${fStr}`);
+                                    if (fStr) currentG1F = cfg.f;
+                                }
+                            }
+                            
+                            let lastZ = startZ;
+                            for (let j = 1; j < finalPath.length; j++) {
+                                const pt = finalPath[j];
+                                const ptZ = useTabThisPass && isPointInTab(pt, tabCenters, tabLength) ? tabZVal : targetZ;
+                                const fStr = (currentG1F !== cfg.f) ? ` F${cfg.f}` : "";
+                                
+                                if (Math.abs(ptZ - lastZ) > 0.001) {
+                                    gc.push(`G1 X${pt.x.toFixed(3)} Y${pt.y.toFixed(3)} Z${ptZ.toFixed(3)}${fStr}`);
+                                    if (fStr) currentG1F = cfg.f;
+                                    lastZ = ptZ;
+                                    currentZ = ptZ;
+                                } else {
+                                    if (Math.abs(currentZ - ptZ) > 0.001) {
                                         gc.push(`G1 X${pt.x.toFixed(3)} Y${pt.y.toFixed(3)} Z${ptZ.toFixed(3)}${fStr}`);
                                         if (fStr) currentG1F = cfg.f;
-                                        lastZ = ptZ;
                                         currentZ = ptZ;
+                                        lastZ = ptZ;
                                     } else {
-                                        if (Math.abs(currentZ - ptZ) > 0.001) {
-                                            gc.push(`G1 X${pt.x.toFixed(3)} Y${pt.y.toFixed(3)} Z${ptZ.toFixed(3)}${fStr}`);
-                                            if (fStr) currentG1F = cfg.f;
-                                            currentZ = ptZ;
-                                            lastZ = ptZ;
-                                        } else {
-                                            gc.push(`G1 X${pt.x.toFixed(3)} Y${pt.y.toFixed(3)}${fStr}`);
-                                            if (fStr) currentG1F = cfg.f;
-                                        }
+                                        gc.push(`G1 X${pt.x.toFixed(3)} Y${pt.y.toFixed(3)}${fStr}`);
+                                        if (fStr) currentG1F = cfg.f;
                                     }
                                 }
-                                if (isLaser) {
-                                    gc.push("M05"); 
-                                }
-                                lastPtInLayer = finalPath[finalPath.length - 1];
-                                lastPointOfPart = lastPtInLayer;
-                                currentZ = useTabThisPass && isPointInTab(lastPtInLayer, tabCenters, tabLength) ? tabZVal : targetZ;
-                            });
-                        }
-                    });
-
-                    if (!isLaser) {
-                        if (Math.abs(currentZ - SAFE_Z_VAL) > 0.001) {
-                            gc.push(`G0 Z${SAFE_Z_VAL.toFixed(3)}`);
-                            currentZ = SAFE_Z_VAL;
-                        }
+                            }
+                            if (isLaser) {
+                                gc.push("M05"); 
+                            }
+                            lastPtInLayer = finalPath[finalPath.length - 1];
+                            lastPointOfPart = lastPtInLayer;
+                            currentZ = useTabThisPass && isPointInTab(lastPtInLayer, tabCenters, tabLength) ? tabZVal : targetZ;
+                        });
                     }
-                    if (lastPointOfPart) { currentX = lastPointOfPart.x; currentY = lastPointOfPart.y; }
+                });
+
+                if (!isLaser) {
+                    if (Math.abs(currentZ - SAFE_Z_VAL) > 0.001) {
+                        gc.push(`G0 Z${SAFE_Z_VAL.toFixed(3)}`);
+                        currentZ = SAFE_Z_VAL;
+                    }
                 }
+                if (lastPointOfPart) { currentX = lastPointOfPart.x; currentY = lastPointOfPart.y; }
             });
             gc.push("G0 X0 Y0");
             const blob = new Blob([gc.join('\n')], { type: 'text/plain' });
