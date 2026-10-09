@@ -2728,7 +2728,8 @@
                     `; CNC V6.4 - Concentric Inward Clearing V-Carving & Grayscale Relief Pro`, 
                     `G21`, 
                     `G90`, 
-                    `G0 X0 Y0 F2000`
+                    `G0 Z${(parseFloat(SAFE_Z) || 1.0).toFixed(3)}`,
+                    `G0 X0 Y0`
                 ];
                 
                 let currentZ = null; 

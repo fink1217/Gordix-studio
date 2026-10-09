@@ -226,7 +226,8 @@
                             <label class="block text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1" data-i18n="mode">加工模式</label>
                             <select id="job-type">
                                 <option value="laser" data-i18n="optLaser">雷射切割</option>
-                                <option value="outer" selected data-i18n="optOuter">CNC 外輪廓</option>
+                                <option value="auto" selected data-i18n="optAuto">CNC 輪廓（自動判斷內外）</option>
+                                <option value="outer" data-i18n="optOuter">CNC 外輪廓</option>
                                 <option value="inner" data-i18n="optInner">CNC 內輪廓</option>
                                 <option value="pocket" data-i18n="optPocket">CNC 槽加工</option>
                             </select>
@@ -588,6 +589,7 @@
                 feedRate: "進給速率",
                 mode: "加工模式",
                 optLaser: "雷射切割",
+                optAuto: "輪廓（自動判斷內外）",
                 optOuter: "外加工",
                 optInner: "內加工",
                 optPocket: "槽加工",
@@ -638,6 +640,7 @@
                 feedRate: "Feed Rate (F)",
                 mode: "Process Mode",
                 optLaser: "Laser Cutting",
+                optAuto: "Profile (auto inside/outside)",
                 optOuter: "Mill Outside",
                 optInner: "Mill Inside",
                 optPocket: "Mill Pocket",
@@ -1223,7 +1226,7 @@
 
             parts = vectorPaths.map((p, idx) => {
                 let pMinX = Infinity, pMaxX = -Infinity, pMinY = Infinity, pMaxY = -Infinity;
-                p.points.forEach(pt => { pMinX = Math.min(pMinX, pt.x); pMaxX = Math.max(pMaxX, pt.x); pMinY = Math.min(pMinY, pt.y); pMaxY = Math.max(gMaxY, pt.y); });
+                p.points.forEach(pt => { pMinX = Math.min(pMinX, pt.x); pMaxX = Math.max(pMaxX, pt.x); pMinY = Math.min(pMinY, pt.y); pMaxY = Math.max(pMaxY, pt.y); });
                 
                 const centeredPath = p.points.map(pt => ({ x: pt.x - gCx, y: pt.y - gCy }));
                 
@@ -1246,6 +1249,11 @@
 
             // 計算所有零件的包絡深度
             updateAllNestingDepths();
+            // 預設自動判斷內外：外框切外側、孔切內側
+            parts.forEach(p => {
+                p.jobConfig.auto = true;
+                p.jobConfig.type = p.nestingDepth % 2 === 1 ? 'inner' : 'outer';
+            });
 
             selectedIndices.clear(); 
             expandedGroups.clear(); // 重新載入檔案，所有群組維持預設收合狀態
@@ -1357,7 +1365,7 @@
                 const cl = new ClipperLib.Clipper();
                 cl.AddPaths(allClipperPaths, ClipperLib.PolyType.ptSubject, true);
                 const polyTree = new ClipperLib.PolyTree();
-                cl.Execute(ClipperLib.ClipType.ctUnion, polyTree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+                cl.Execute(ClipperLib.ClipType.ctUnion, polyTree, ClipperLib.PolyFillType.pftEvenOdd, ClipperLib.PolyFillType.pftEvenOdd); // 奇偶規則：內層圖形是島，不會被挖掉
                 
                 const firstIdx = indices[0];
                 const cfg = parts[firstIdx].jobConfig;
@@ -1681,6 +1689,7 @@
                     document.getElementById(id).value = lastP.jobConfig[key] || lastP.jobConfig[id.split('-')[1]];
                 });
                 document.getElementById('job-use-tab').checked = !!lastP.jobConfig.useTab;
+                if (lastP.jobConfig.auto) document.getElementById('job-type').value = 'auto';
             } else { panel.classList.add('hidden'); hint.classList.remove('hidden'); }
             toggleMillingOptions();
         }
@@ -1708,7 +1717,7 @@
             const val = document.getElementById('job-type').value;
             document.getElementById('milling-opts').classList.toggle('hidden', val === 'laser');
             document.getElementById('pocket-opts').classList.toggle('hidden', val !== 'pocket');
-            document.getElementById('tab-opts-container').classList.toggle('hidden', val !== 'outer' && val !== 'inner');
+            document.getElementById('tab-opts-container').classList.toggle('hidden', val !== 'outer' && val !== 'inner' && val !== 'auto');
         }
         document.getElementById('job-type').onchange = toggleMillingOptions;
 
@@ -1722,6 +1731,10 @@
             const newStep = parseFloat(document.getElementById('mill-step').value);
             const newOverlap = Math.max(0.1, Math.min(0.9, parseFloat(document.getElementById('mill-overlap').value) || 0.5));
             const newUseTab = document.getElementById('job-use-tab').checked;
+            // 自動判斷內外：被偶數層包住的是外框（切外側），奇數層的是孔（切內側）
+            updateAllNestingDepths();
+            const isAuto = newType === 'auto';
+            const typeOf = idx => isAuto ? (parts[idx].nestingDepth % 2 === 1 ? 'inner' : 'outer') : newType;
 
             let minX = Infinity, maxX = -Infinity;
             selectedIndices.forEach(idx => { parts[idx].rawPath.forEach(pt => { minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x); }); });
@@ -1731,9 +1744,9 @@
                 parts[idx].toolpath = null;
                 parts[idx].pocketContourPaths = null;
                 parts[idx].pocketScanPaths = null;
-                parts[idx].jobConfig = { type: newType, f: newF, d: newD, depth: newDepth, step: newStep, overlap: newOverlap, resolution: newRes, useTab: newUseTab };
+                parts[idx].jobConfig = { type: typeOf(idx), auto: isAuto, f: newF, d: newD, depth: newDepth, step: newStep, overlap: newOverlap, resolution: newRes, useTab: newUseTab };
                 parts[idx].currentDim = { w: parts[idx].originalDim.w * groupScale, h: parts[idx].originalDim.h * groupScale };
-                parts[idx].appliedMethod = newType; 
+                parts[idx].appliedMethod = typeOf(idx); 
             });
 
             if (newType === 'pocket') calculateV3PocketPaths(groupScale);
@@ -1776,7 +1789,7 @@
             const cl = new ClipperLib.Clipper();
             cl.AddPaths(allClipperPaths, ClipperLib.PolyType.ptSubject, true);
             const polyTree = new ClipperLib.PolyTree();
-            cl.Execute(ClipperLib.ClipType.ctUnion, polyTree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+            cl.Execute(ClipperLib.ClipType.ctUnion, polyTree, ClipperLib.PolyFillType.pftEvenOdd, ClipperLib.PolyFillType.pftEvenOdd); // 奇偶規則：內層圖形是島，不會被挖掉
             const firstIdx = selectedArr[0];
             const cfg = parts[firstIdx].jobConfig;
             
@@ -2080,7 +2093,8 @@
                                     if (dToStart < 0.5) needRetract = false; 
                                 } else if (lastPtInLayer) {
                                     const dToLast = Math.sqrt(Math.pow(start.x - lastPtInLayer.x, 2) + Math.pow(start.y - lastPtInLayer.y, 2));
-                                    if (dToLast < (cfg.d * 1.5)) needRetract = false;
+                                    // 只有挖槽的掃描線之間可以不抬刀直接連過去；輪廓之間一律抬刀，避免切過不該切的材料
+                                    if (!phase.isContour && dToLast <= cfg.d) needRetract = false;
                                 }
 
                                 if (needRetract) {
@@ -2160,7 +2174,7 @@
         // --- 產生 Gcode 輸出 ---
         document.getElementById('export-gcode').onclick = () => {
             if(parts.length === 0) return;
-            let gc = ["; CNC V4.0", "G21", "G90", "G0 X0 Y0 F2000"];
+            let gc = ["; CNC V4.0", "; Spindle is manual: turn it on before starting", "G21", "G90", `G0 Z${(parseFloat(SAFE_Z) || 2.0).toFixed(3)}`, "G0 X0 Y0"];
             
             const orderPriority = { "laser": 0, "pocket": 1, "inner": 2, "outer": 3 };
             let activeParts = parts.filter(p => p.visible && p.toolpath && p.toolpath.length > 0);
@@ -2256,7 +2270,8 @@
                                     if (dToStart < 0.5) needRetract = false; 
                                 } else if (lastPtInLayer) {
                                     const dToLast = Math.sqrt(Math.pow(start.x - lastPtInLayer.x, 2) + Math.pow(start.y - lastPtInLayer.y, 2));
-                                    if (dToLast < (cfg.d * 1.5)) needRetract = false;
+                                    // 只有挖槽的掃描線之間可以不抬刀直接連過去；輪廓之間一律抬刀，避免切過不該切的材料
+                                    if (!phase.isContour && dToLast <= cfg.d) needRetract = false;
                                 }
                                 
                                 if (needRetract) {
