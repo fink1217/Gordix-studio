@@ -377,16 +377,57 @@
                         </div>
                     </div>
                     
-                    <!-- 比例不是 1 但進階收起來時，提醒使用者這個值仍會寫進 table.cfg -->
-                    <div id="scale-notice" class="hidden mt-4 text-[11px] font-bold text-violet-400"></div>
-                    <div data-advanced class="grid grid-cols-2 gap-4 mt-6 pt-4 border-t border-slate-700/50">
-                        <div>
-                            <label id="ui-scaleX" class="block text-[10px] md:text-xs font-bold text-muted-custom uppercase mb-1">Scale X</label>
-                            <input type="number" id="valX" step="0.0001" class="w-full bg-input-custom border border-input-custom p-2 rounded font-mono text-custom outline-none focus:ring-2 focus:ring-slate-500" oninput="updateCurrentTableData(false)">
+                    <!-- 尺寸比例校正：畫一個已知尺寸的框、量實際尺寸，自動算出比例 X / Y -->
+                    <div class="mt-6 pt-4 border-t border-slate-700/50">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <div>
+                                <div id="cal-title" class="text-sm font-bold text-title">尺寸比例校正</div>
+                                <div id="cal-status" class="text-[11px] text-muted-custom font-mono mt-0.5"></div>
+                            </div>
+                            <button id="cal-toggle" onclick="toggleCal()" class="btn-custom-secondary border px-3 py-1.5 rounded-lg text-xs font-bold"></button>
                         </div>
-                        <div>
-                            <label id="ui-scaleY" class="block text-[10px] md:text-xs font-bold text-muted-custom uppercase mb-1">Scale Y</label>
-                            <input type="number" id="valY" step="0.0001" class="w-full bg-input-custom border border-input-custom p-2 rounded font-mono text-custom outline-none focus:ring-2 focus:ring-slate-500" oninput="updateCurrentTableData(false)">
+
+                        <div id="cal-panel" class="hidden mt-4 space-y-4 text-xs">
+                            <div class="p-3 rounded-lg range-box border">
+                                <div class="font-bold text-title mb-1" id="cal-s1"></div>
+                                <p class="text-muted-custom mb-2" id="cal-s1-desc"></p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="input-card"><span class="tag-label">W</span><input type="number" id="cal-w" class="uniform-input" step="10" oninput="renderCal()"><span class="unit-label">mm</span></div>
+                                    <div class="input-card"><span class="tag-label">H</span><input type="number" id="cal-h" class="uniform-input" step="10" oninput="renderCal()"><span class="unit-label">mm</span></div>
+                                </div>
+                                <p class="text-[11px] text-muted-custom mt-1 font-mono" id="cal-limit"></p>
+                                <p class="text-[11px] font-bold text-amber-500 mt-1" id="cal-baseline"></p>
+                                <button onclick="downloadCalFrame()" id="cal-download" class="mt-2 w-full btn-custom-primary font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"></button>
+                            </div>
+
+                            <div class="p-3 rounded-lg range-box border">
+                                <div class="font-bold text-title mb-1" id="cal-s2"></div>
+                                <p class="text-muted-custom mb-2" id="cal-s2-desc"></p>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div class="input-card"><span class="tag-label">X</span><input type="number" id="cal-mx" class="uniform-input" step="0.1" placeholder="—" oninput="renderCal()"><span class="unit-label">mm</span></div>
+                                    <div class="input-card"><span class="tag-label">Y</span><input type="number" id="cal-my" class="uniform-input" step="0.1" placeholder="—" oninput="renderCal()"><span class="unit-label">mm</span></div>
+                                </div>
+                            </div>
+
+                            <div class="p-3 rounded-lg range-box border">
+                                <div class="font-bold text-title mb-1" id="cal-s3"></div>
+                                <div id="cal-result" class="font-mono text-custom leading-relaxed"></div>
+                                <div id="cal-warn" class="hidden mt-1 text-[11px] font-bold text-amber-500"></div>
+                                <button onclick="applyCal()" id="cal-apply" class="mt-2 w-full btn-custom-primary font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"></button>
+                                <p class="text-[11px] font-bold text-green-500 mt-2 hidden" id="cal-done"></p>
+                            </div>
+                        </div>
+
+                        <!-- 進階：直接輸入比例數值 -->
+                        <div data-advanced class="grid grid-cols-2 gap-4 mt-4">
+                            <div>
+                                <label id="ui-scaleX" class="block text-[10px] md:text-xs font-bold text-muted-custom uppercase mb-1">Scale X</label>
+                                <input type="number" id="valX" step="0.0001" class="w-full bg-input-custom border border-input-custom p-2 rounded font-mono text-custom outline-none focus:ring-2 focus:ring-slate-500" oninput="updateCurrentTableData(false)">
+                            </div>
+                            <div>
+                                <label id="ui-scaleY" class="block text-[10px] md:text-xs font-bold text-muted-custom uppercase mb-1">Scale Y</label>
+                                <input type="number" id="valY" step="0.0001" class="w-full bg-input-custom border border-input-custom p-2 rounded font-mono text-custom outline-none focus:ring-2 focus:ring-slate-500" oninput="updateCurrentTableData(false)">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -450,7 +491,26 @@
                 sideD: "對角D",
                 advancedOff: "進階",
                 advancedOn: "進階 ✓",
-                scaleNotice: "進階設定作用中（已隱藏）：比例 X {x}、比例 Y {y}",
+                calTitle: "尺寸比例校正",
+                calStatus: "表格 {t} · 比例 X {x} · Y {y}",
+                calUncal: "（未校正）",
+                calDoneTag: "（已校正）",
+                calOpen: "開始校正",
+                calClose: "收起",
+                calS1: "① 畫校正框",
+                calS1Desc: "下載後用雷射或畫筆模組執行，會在機器中心畫出一個長方形，四角的線條會多延伸 15 mm 形成十字，方便量測。框越大越準，但不要超出加工範圍。",
+                calLimit: "這個表格的加工範圍最大可畫 {w} × {h} mm",
+                calTooBig: "⚠ 框超出加工範圍，請縮小",
+                calBaseline: "畫框時，SD 卡上的 table.cfg 必須是目前這組比例（X {x}、Y {y}），計算才會正確。",
+                calDownload: "下載校正框 G-code",
+                calS2: "② 量實際尺寸",
+                calS2Desc: "沿著中心十字的水平線，量左右兩條直線的距離（X）；沿著垂直線，量上下兩條直線的距離（Y）。兩端都量線條的同一側邊緣。",
+                calS3: "③ 計算並套用",
+                calNeed: "輸入兩個實測值後顯示結果",
+                calResult: "X：設計 {dw} / 實測 {mw} → {ox} × {rx} = {nx}\nY：設計 {dh} / 實測 {mh} → {oy} × {ry} = {ny}",
+                calWarn: "⚠ 誤差超過 3%，請確認量測值和單位（mm）是否正確",
+                calApply: "套用到表格 {t}",
+                calApplied: "已套用。請按「下載 table.cfg」，放回 SD 卡後在機器上重新選這個表格。換機器或換皮帶後要重新校正。",
                 legendCenter: "機器中心",
                 legendFront: "機器前側",
                 legendFacing: "前側朝向 S 邊放置",
@@ -472,7 +532,26 @@
                 sideD: "Diagonal D",
                 advancedOff: "Advanced",
                 advancedOn: "Advanced ✓",
-                scaleNotice: "Advanced settings active (hidden): Scale X {x}, Scale Y {y}",
+                calTitle: "Size Scale Calibration",
+                calStatus: "Table {t} · Scale X {x} · Y {y}",
+                calUncal: " (not calibrated)",
+                calDoneTag: " (calibrated)",
+                calOpen: "Calibrate",
+                calClose: "Close",
+                calS1: "① Draw the calibration frame",
+                calS1Desc: "Run it with the laser or pen module. It draws a rectangle at the machine center; the corner lines extend 15 mm to form crosses for easy measuring. Bigger is more accurate, but stay inside the work range.",
+                calLimit: "Largest frame for this table's work range: {w} × {h} mm",
+                calTooBig: "⚠ Frame exceeds the work range, make it smaller",
+                calBaseline: "When drawing, table.cfg on the SD card must contain the current scales (X {x}, Y {y}) for the result to be correct.",
+                calDownload: "Download calibration G-code",
+                calS2: "② Measure the real size",
+                calS2Desc: "Along the horizontal line of the center cross, measure between the left and right lines (X); along the vertical line, between the top and bottom lines (Y). Measure the same edge of each line.",
+                calS3: "③ Calculate and apply",
+                calNeed: "Enter both measurements to see the result",
+                calResult: "X: design {dw} / measured {mw} → {ox} × {rx} = {nx}\nY: design {dh} / measured {mh} → {oy} × {ry} = {ny}",
+                calWarn: "⚠ Error exceeds 3%. Check the measurements and that they are in mm",
+                calApply: "Apply to Table {t}",
+                calApplied: "Applied. Click \"Download table.cfg\", copy it to the SD card and reselect this table on the machine. Recalibrate after changing the machine or belts.",
                 legendCenter: "Machine center",
                 legendFront: "Machine front",
                 legendFacing: "Front faces side S",
@@ -539,6 +618,9 @@
             document.getElementById('legend-center').innerText = t.legendCenter;
             document.getElementById('legend-front').innerText = t.legendFront;
             document.getElementById('legend-facing').innerText = t.legendFacing;
+            [['cal-title', 'calTitle'], ['cal-s1', 'calS1'], ['cal-s1-desc', 'calS1Desc'], ['cal-download', 'calDownload'],
+             ['cal-s2', 'calS2'], ['cal-s2-desc', 'calS2Desc'], ['cal-s3', 'calS3'], ['cal-done', 'calApplied']]
+                .forEach(([id, key]) => { document.getElementById(id).innerText = t[key]; });
 
             // 確保主題圖示與類別套用正確
             applyTheme(currentTheme);
@@ -562,10 +644,116 @@
             btn.innerText = on ? t.advancedOn : t.advancedOff;
             btn.className = 'whitespace-nowrap px-3 py-1.5 rounded-lg text-[13px] font-bold border transition-all ' +
                 (on ? 'bg-violet-500 border-violet-300 text-white' : 'bg-white/10 hover:bg-white/20 border-white/10 text-white');
+            renderCal();
+        }
+
+        // ===== 尺寸比例校正 =====
+        // 機器韌體以 table.cfg 的比例縮放座標；畫框時已套用舊比例，所以新比例 = 舊比例 × 設計尺寸 ÷ 實測尺寸
+        const CAL_OVERSHOOT = 15; // 角落線條延伸成十字的長度 (mm)
+        const fmt4 = v => (Math.round(v * 10000) / 10000).toFixed(4);
+
+        // 加工範圍內可畫的最大框（扣掉十字延伸），並給一個取整的預設值
+        function calLimits() {
+            const r = GordixTable.workRange(allTables[currentTableId]);
+            return { w: (r.x - CAL_OVERSHOOT) * 2, h: (r.y - CAL_OVERSHOOT) * 2 };
+        }
+
+        function toggleCal() {
+            const panel = document.getElementById('cal-panel');
+            panel.classList.toggle('hidden');
+            if (!panel.classList.contains('hidden') && !document.getElementById('cal-w').value) resetCalSize();
+            renderCal();
+        }
+
+        function resetCalSize() {
+            const lim = calLimits();
+            document.getElementById('cal-w').value = Math.max(100, Math.floor(lim.w * 0.9 / 100) * 100);
+            document.getElementById('cal-h').value = Math.max(100, Math.floor(lim.h * 0.9 / 100) * 100);
+        }
+
+        function calValues() {
+            const num = id => parseFloat(document.getElementById(id).value);
             const d = allTables[currentTableId];
-            const notice = document.getElementById('scale-notice');
-            notice.innerText = t.scaleNotice.replace('{x}', d.X).replace('{y}', d.Y);
-            notice.classList.toggle('hidden', on || (d.X === 1 && d.Y === 1));
+            const v = { w: num('cal-w'), h: num('cal-h'), mx: num('cal-mx'), my: num('cal-my'), ox: d.X || 1, oy: d.Y || 1 };
+            v.ready = v.w > 0 && v.h > 0 && v.mx > 0 && v.my > 0;
+            if (v.ready) {
+                v.rx = v.w / v.mx; v.ry = v.h / v.my;
+                v.nx = v.ox * v.rx; v.ny = v.oy * v.ry;
+            }
+            return v;
+        }
+
+        function renderCal() {
+            const t = i18n[currentLang], d = allTables[currentTableId];
+            const calibrated = d.X !== 1 || d.Y !== 1;
+            document.getElementById('cal-status').innerText =
+                t.calStatus.replace('{t}', currentTableId).replace('{x}', fmt4(d.X || 1)).replace('{y}', fmt4(d.Y || 1)) + (calibrated ? t.calDoneTag : t.calUncal);
+            const open = !document.getElementById('cal-panel').classList.contains('hidden');
+            document.getElementById('cal-toggle').innerText = open ? t.calClose : t.calOpen;
+            if (!open) return;
+
+            const lim = calLimits(), v = calValues();
+            const tooBig = v.w > lim.w || v.h > lim.h;
+            const limitEl = document.getElementById('cal-limit');
+            limitEl.innerText = tooBig ? t.calTooBig : t.calLimit.replace('{w}', Math.floor(lim.w)).replace('{h}', Math.floor(lim.h));
+            limitEl.className = 'text-[11px] mt-1 font-mono ' + (tooBig ? 'text-amber-500 font-bold' : 'text-muted-custom');
+            document.getElementById('cal-download').disabled = tooBig || !(v.w > 0 && v.h > 0);
+            document.getElementById('cal-baseline').innerText = t.calBaseline.replace('{x}', fmt4(v.ox)).replace('{y}', fmt4(v.oy));
+
+            const result = document.getElementById('cal-result');
+            const warn = document.getElementById('cal-warn');
+            const apply = document.getElementById('cal-apply');
+            apply.innerText = t.calApply.replace('{t}', currentTableId);
+            if (!v.ready) {
+                result.innerText = t.calNeed;
+                warn.classList.add('hidden');
+                apply.disabled = true;
+                return;
+            }
+            result.innerText = t.calResult
+                .replace('{dw}', v.w).replace('{mw}', v.mx).replace('{ox}', fmt4(v.ox)).replace('{rx}', v.rx.toFixed(5)).replace('{nx}', fmt4(v.nx))
+                .replace('{dh}', v.h).replace('{mh}', v.my).replace('{oy}', fmt4(v.oy)).replace('{ry}', v.ry.toFixed(5)).replace('{ny}', fmt4(v.ny));
+            warn.innerText = t.calWarn;
+            warn.classList.toggle('hidden', Math.abs(v.rx - 1) <= 0.03 && Math.abs(v.ry - 1) <= 0.03);
+            apply.disabled = false;
+            document.getElementById('cal-done').classList.add('hidden'); // 輸入了新的實測值，上次的套用提示不再適用
+        }
+
+        function applyCal() {
+            const v = calValues();
+            if (!v.ready) return;
+            document.getElementById('valX').value = fmt4(v.nx);
+            document.getElementById('valY').value = fmt4(v.ny);
+            updateCurrentTableData(false);
+            // 新比例已套用，舊的實測值不再對應，清掉避免重複套用
+            document.getElementById('cal-mx').value = '';
+            document.getElementById('cal-my').value = '';
+            renderCal();
+            document.getElementById('cal-done').classList.remove('hidden');
+        }
+
+        // 校正框 G-code：格式與繪圖工具的雷射 / 畫筆輸出相同（M03 開、M05 關），中心在機器原點
+        function downloadCalFrame() {
+            const v = calValues(), hw = v.w / 2, hh = v.h / 2, o = CAL_OVERSHOOT, f = n => n.toFixed(3);
+            const strokes = [
+                [[-10, 0], [10, 0]], [[0, -10], [0, 10]],                 // 中心十字
+                [[-hw - o, hh], [hw + o, hh]], [[-hw - o, -hh], [hw + o, -hh]], // 上下兩條
+                [[-hw, -hh - o], [-hw, hh + o]], [[hw, -hh - o], [hw, hh + o]]  // 左右兩條
+            ];
+            const g = [
+                `(Gordix scale calibration frame: ${v.w} x ${v.h} mm, centered at machine origin)`,
+                `(Table ${currentTableId}, scale at drawing time: X ${fmt4(v.ox)} Y ${fmt4(v.oy)})`,
+                '(Measure between the left/right lines for X and the top/bottom lines for Y)',
+                'G21', 'G90', 'G1 F1500'
+            ];
+            strokes.forEach(([a, b]) => {
+                g.push(`G0 X${f(a[0])} Y${f(a[1])}`, 'M03 S255', `G1 X${f(b[0])} Y${f(b[1])}`, 'M05');
+            });
+            g.push('G0 X0 Y0');
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([g.join('\n')], { type: 'text/plain' }));
+            a.download = `calibration_${v.w}x${v.h}.gcode`;
+            a.click();
         }
 
         function renderTableList() {
@@ -644,6 +832,7 @@
             };
             renderTableList();
             draw();
+            renderCal();
             GordixTable.save(allTables, currentTableId);
         }
 
