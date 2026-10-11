@@ -446,5 +446,162 @@ const GordixCam = (() => {
         return sec;
     }
 
-    return { profilePaths, pocketPaths, isInsideOther, isPointInPolygon, makeUnit, cuttingOrder, planMoves, toGcode, estimateSeconds };
+    // --- 圖層 → 加工單元 → 依刀具分檔 ---
+
+    // 預設刀具庫（數值沿用舊工具，輸出才會與舊版相同）
+    const TOOLS = [
+        { id: 'flat635', type: 'flat', d: 6.35, step: 1.0, f: 1000, overlap: 0.5 },
+        { id: 'flat3175', type: 'flat', d: 3.175, step: 0.5, f: 800, overlap: 0.5 },
+        { id: 'vbit90', type: 'vbit', d: 6.0, angle: 90, step: 99, f: 1000 },
+        { id: 'ball6', type: 'ball', d: 6.0, step: 99, f: 1000, stepover: 1.8 }
+    ];
+
+    // 加工方式 → 加工頭；cut = 會切出材料邊界（判斷孔的依據）
+    const OPS = {
+        profile: { head: 'router', cut: true },   // 輪廓（自動判斷內外）
+        outer: { head: 'router', cut: true },
+        inner: { head: 'router', cut: true },
+        pocket: { head: 'router' },
+        engrave: { head: 'router' },              // 沿線雕刻
+        vcarve: { head: 'router' },
+        relief: { head: 'router' },               // 灰階浮雕
+        laser: { head: 'laser', cut: true },      // 雷射切割
+        drillMark: { head: 'mark' }               // 只標孔位（放樣檔）
+    };
+
+    // 檔與檔的先後：放樣 → 雷射 → 銑削（依檔內最後的階段：挖槽 → 內輪廓 → 外輪廓，切穿再往後）
+    const STAGE = { pocket: 0, inner: 1, outer: 2 };
+    const HEAD_RANK = { mark: -1, laser: 0 };
+
+    function boundsOf(points) {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        points.forEach(pt => {
+            minX = Math.min(minX, pt.x); maxX = Math.max(maxX, pt.x);
+            minY = Math.min(minY, pt.y); maxY = Math.max(maxY, pt.y);
+        });
+        return { minX, maxX, minY, maxY };
+    }
+
+    // 自動內外：只看「切割類」圖層的外框，被奇數層包住的是孔。
+    // 挖槽、雕刻的框不是材料邊界，不算進去（舊版全部都算，挖槽裡的孔會被誤判成外輪廓）。
+    function cutNesting(job) {
+        const isCut = o => !!(OPS[job.layers.find(l => l.id === o.layerId).op] || {}).cut;
+        const shapes = job.objects.map(o => ({ id: o.id, points: o.points, bounds: boundsOf(o.points), cut: isCut(o) }));
+        const cutters = shapes.filter(s => s.cut);
+        return new Map(shapes.map(s => [s.id, cutters.filter(c => c !== s && isInsideOther(s, c)).length]));
+    }
+
+    const layerDepth = (job, layer) => layer.through ? job.thickness + job.overcut : layer.depth;
+    const fileKey = layer => OPS[layer.op].head === 'router' ? 'router:' + layer.toolId : OPS[layer.op].head;
+
+    // 一個圖層的物件 → 加工單元
+    function layerUnits(job, layer, tool, objs, nest) {
+        const base = {
+            d: tool ? tool.d : 0, depth: layerDepth(job, layer), step: tool ? tool.step : 1,
+            f: tool ? tool.f : (layer.feed || 1000), useTab: !!(layer.through && layer.tabs),
+            resolution: job.resolution, overlap: (tool && tool.overlap) || 0.5
+        };
+        const unit = (type, objectIds, nestingDepth, phases) =>
+            makeUnit({ type, cfg: { ...base, type }, layerId: layer.id, objectIds, nestingDepth, through: !!layer.through, phases });
+
+        if (layer.op === 'profile' || layer.op === 'outer' || layer.op === 'inner' || layer.op === 'laser') {
+            return objs.map(o => {
+                const type = layer.op === 'profile' ? (nest.get(o.id) % 2 === 1 ? 'inner' : 'outer') : layer.op;
+                // 雷射的路徑之間一律關雷射再移動（舊版距離近時會開著雷射直接連過去，燒出一條多餘的線）
+                return unit(type, [o.id], nest.get(o.id),
+                    [{ paths: profilePaths(o.points, { ...base, type }, 1), isContour: type !== 'laser', linkDist: -1 }]);
+            });
+        }
+        if (layer.op === 'pocket') {
+            // 每個最外層的物件連同包在它裡面的物件（島）是一個挖槽區域，各自排序
+            const shapes = objs.map(o => ({ o, points: o.points, bounds: boundsOf(o.points) }));
+            const tops = shapes.filter(s => !shapes.some(t => t !== s && isInsideOther(s, t)));
+            return tops.map(top => {
+                const group = [top, ...shapes.filter(s => s !== top && isInsideOther(s, top))];
+                const r = pocketPaths(group.map(s => s.points), { ...base, type: 'pocket' }, 1);
+                return unit('pocket', group.map(s => s.o.id), nest.get(top.o.id), [
+                    { paths: r.scan, isContour: false, linkDist: base.d },
+                    { paths: r.contour, isContour: true, linkDist: -1 }
+                ]);
+            });
+        }
+        return []; // 沿線雕刻、V 雕刻、浮雕、標孔位：後續步驟加入
+    }
+
+    // 所有顯示中的圖層 → 加工單元（沒有刀具的銑削圖層略過，由畫面提示）
+    function buildUnits(job, tools) {
+        const nest = cutNesting(job);
+        return job.layers.filter(l => l.visible).flatMap(layer => {
+            const tool = tools.find(t => t.id === layer.toolId);
+            if (OPS[layer.op].head === 'router' && !tool) return [];
+            const objs = job.objects.filter(o => o.layerId === layer.id);
+            return layerUnits(job, layer, tool, objs, nest).map(u => ({ ...u, fileKey: fileKey(layer) }));
+        }).filter(u => u.phases.some(ph => ph.paths.length));
+    }
+
+    function toolLabel(t) {
+        if (t.type === 'vbit') return `V-bit ${t.angle}deg D${t.d}`;
+        if (t.type === 'ball') return `ball nose D${t.d}`;
+        return `flat end mill D${t.d}`;
+    }
+
+    // 檔名用英文：機器螢幕與 SD 卡不一定支援中文檔名
+    function fileSlug(f) {
+        if (f.head === 'laser') return 'laser';
+        if (f.head === 'mark') return 'layout';
+        return (f.tool.type === 'vbit' ? 'vbit' + f.tool.angle : f.tool.type + f.tool.d);
+    }
+
+    // 檔頭註解（ASCII）：第幾個檔、刀具、開始前要做的事
+    function fileComments(f, i, files) {
+        const c = [`Gordix Studio CNC - file ${i + 1} of ${files.length}`];
+        if (f.head === 'router') {
+            const prevRouter = i > 0 && files[i - 1].head === 'router';
+            c.push(`Tool: ${toolLabel(f.tool)}`,
+                (prevRouter ? 'Before start: stop spindle, change tool' : 'Before start: install tool')
+                + ', set Z0 on material surface, router dial 3, start spindle',
+                'Spindle is manual: turn it on before starting',
+                'Order: center outward');
+        } else if (f.head === 'laser') {
+            c.push('Tool: laser module', 'Before start: mount laser module, set Z0, wear laser safety glasses');
+        } else {
+            c.push('Tool: laser or pen (layout marks)');
+        }
+        return c;
+    }
+
+    // 依加工頭與刀具分檔：同一把刀同一檔；檔內由機器中心往外
+    function buildFiles(job, tools) {
+        const groups = new Map();
+        buildUnits(job, tools).forEach(u => {
+            if (!groups.has(u.fileKey)) groups.set(u.fileKey, []);
+            groups.get(u.fileKey).push(u);
+        });
+        const files = [...groups].map(([key, units]) => {
+            const head = key.startsWith('router:') ? 'router' : key;
+            const stages = units.map(u => (STAGE[u.type] ?? 0) + (u.through ? 0.5 : 0));
+            return {
+                key, head, tool: head === 'router' ? tools.find(t => 'router:' + t.id === key) : null,
+                units: cuttingOrder(units),
+                rank: head === 'router' ? 1 + Math.max(...stages) : HEAD_RANK[head], minStage: Math.min(...stages)
+            };
+        });
+        files.sort((a, b) => (a.rank - b.rank) || (a.minStage - b.minStage));
+        return files.map((f, i) => {
+            const comments = fileComments(f, i, files);
+            const moves = planMoves(f.units, job.safeZ);
+            return {
+                ...f, comments, moves,
+                name: `${job.name}_${String(i + 1).padStart(2, '0')}_${fileSlug(f)}.gcode`,
+                gcode: toGcode(moves, job.safeZ, comments),
+                seconds: estimateSeconds(moves, job.safeZ)
+            };
+        });
+    }
+
+    return {
+        TOOLS, OPS, profilePaths, pocketPaths, isInsideOther, isPointInPolygon, boundsOf,
+        makeUnit, cuttingOrder, planMoves, toGcode, estimateSeconds,
+        cutNesting, layerDepth, buildUnits, buildFiles, toolLabel
+    };
 })();
