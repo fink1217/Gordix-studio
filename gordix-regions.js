@@ -57,6 +57,17 @@ const GordixRegions = (() => {
         return { thick, thin, dIn };
     }
 
+    // 以半徑 r 的圓做閉運算：補掉比筆寬窄的破洞與縫（筆畫不出來，留著只會讓骨架繞圈）
+    function close(mask, r) {
+        const dOut = edt(mask, 1);
+        const grown = blank(mask.w, mask.h);
+        for (let i = 0; i < dOut.length; i++) grown.data[i] = dOut[i] <= r * r ? 1 : 0;
+        const dBack = edt(grown, 0);
+        const out = blank(mask.w, mask.h);
+        for (let i = 0; i < dBack.length; i++) out.data[i] = mask.data[i] || dBack[i] > r * r ? 1 : 0;
+        return out;
+    }
+
     // 8 連通標記，回傳 { labels, comps: [{ pixels, x0, y0, x1, y1 }] }
     function components(mask) {
         const { w, h, data } = mask;
@@ -350,8 +361,9 @@ const GordixRegions = (() => {
     }
 
     // 遮罩 → 區域。每個區域同時算好中線與外框，圖層換畫法時不用重算。
-    function analyze(mask, opts) {
+    function analyze(input, opts) {
         const pen = opts.penPx, penR = pen / 2, openR = 0.75 * pen;
+        const mask = close(input, penR);
         const { thick, thin, dIn } = splitThickThin(mask, openR);
         const dT = edt(thick, 1);
         const regions = [];
@@ -403,6 +415,6 @@ const GordixRegions = (() => {
         return out;
     }
 
-    return { edt, splitThickThin, components, skeleton, traceSkeleton, pruneSpurs, mergePaths, simplify,
+    return { edt, close, splitThickThin, components, skeleton, traceSkeleton, pruneSpurs, mergePaths, simplify,
              centerlines, contours, inset, hatch, analyze, emit };
 })();

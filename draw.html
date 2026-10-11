@@ -336,6 +336,14 @@
                         <span class="absolute right-3 text-[10px] text-slate-400 dark:text-slate-500 select-none">mm</span>
                     </div>
                     <div id="offset-preview" class="mt-2 text-[9px] font-mono text-slate-500 dark:text-slate-400 italic">Y-Offset: 0.00mm</div>
+                    <div class="mt-3 pt-3 border-t border-blue-200 dark:border-blue-500/20">
+                        <label data-i18n="lineWidthLabel" class="block text-[10px] font-black text-blue-600 dark:text-blue-400 tracking-widest mb-1">線寬（筆尖 / 雷射光點）</label>
+                        <div class="relative flex items-center">
+                            <input type="number" id="line-width" value="1.0" min="0.1" max="10" step="0.1" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-2 pr-8 rounded text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono transition-colors duration-300">
+                            <span class="absolute right-3 text-[10px] text-slate-400 dark:text-slate-500 select-none">mm</span>
+                        </div>
+                        <p data-i18n="lineWidthTip" class="mt-1 text-[9px] text-slate-500 dark:text-slate-400">比線寬細的線條只畫一條中線；比較粗的區塊往內縮半個線寬畫外框，開填滿時再補內部。</p>
+                    </div>
                 </section>
 
                 <!-- Z 軸筆觸：校準筆的壓入深度，灰階深淺換算成筆觸粗細 -->
@@ -466,6 +474,7 @@
 
     <script src="gordix-table.js"></script>
     <script src="gordix-workspace.js"></script>
+    <script src="gordix-regions.js"></script>
     <script>
         const i18n = {
             zh: {
@@ -537,6 +546,9 @@
                 warnBoard: "⚠ 加工物件超出板材",
                 statsPos: "中心位置",
                 penzTitle: "Z 軸筆觸",
+                lineWidthLabel: "線寬（筆尖 / 雷射光點）",
+                lineWidthTip: "比線寬細的線條只畫一條中線；比較粗的區塊往內縮半個線寬畫外框，開填滿時再補內部。",
+                statsCenter: "中線路徑",
                 penzDiamWarn: "⚠ 筆桿直徑還是 0：筆的 Y 方向補償不會套用，畫的位置可能偏移。請在上方「筆桿直徑」填入實際數值。",
                 advancedOff: "進階",
                 advancedOn: "進階 ✓",
@@ -625,6 +637,9 @@
                 warnBoard: "⚠ Object extends beyond the board",
                 statsPos: "Center",
                 penzTitle: "Z-axis Pen Stroke",
+                lineWidthLabel: "Line width (pen tip / laser spot)",
+                lineWidthTip: "Lines thinner than this are drawn once along the centerline; thicker areas get an outline inset by half the width, filled inside when Fill is on.",
+                statsCenter: "Centerlines",
                 penzDiamWarn: "⚠ Pen body diameter is still 0: the pen's Y-offset compensation is not applied and the drawing may be shifted. Enter the real value in Pen Body Dia. above.",
                 advancedOff: "Advanced",
                 advancedOn: "Advanced ✓",
@@ -649,6 +664,7 @@
         let currentLang = localStorage.getItem('gordix-lang') || 'zh';
 
         const penDiamInput = document.getElementById('pen-diameter');
+        const lineWidthInput = document.getElementById('line-width');
         const toolBadge = document.getElementById('tool-type-badge');
         const offsetPreview = document.getElementById('offset-preview');
 
@@ -824,7 +840,11 @@
         let showImage = true, showContour = true, showHatch = true;
         let isSvgSource = false; 
         let rawSvgPaths = [];    
-        let selectedContourIndices = new Set(); // 記錄選擇進行填滿的輪廓索引
+        let selectedContourIndices = new Set(); // 記錄選擇進行填滿的輪廓索引（SVG / DXF）
+        let finalLines = [];      // 中線路徑（不閉合）
+        let drawRegions = [];     // 點陣圖區域分析結果（遮罩像素座標）
+        let drawLayers = [];      // 圖層，順序 = 畫的順序
+        let regionScale = 1;      // 遮罩像素 → 預覽畫布像素
         let pointerDownPos = { x: 0, y: 0 };   // 記錄點擊初始位置以過濾拖曳
 
         let processDebounceTimeout;
@@ -874,6 +894,8 @@
                 triggerLiveProcess();
             }
         };
+
+        lineWidthInput.oninput = () => { if (originalImage) triggerLiveProcess(); };
 
         feedInput.oninput = () => { if (originalImage) updateStats(previewCanvas.width, previewCanvas.height); };
         fillAngleSelect.onchange = () => { if (originalImage) recomputeFillLines(); };
@@ -1251,7 +1273,7 @@
             if (mode === 'resize') recomputeFillLines();
 
             // 點一下（沒有拖動）且開啟填滿時，切換該圖形是否填滿
-            if (fillEnable.checked && pointerDownPos && mode !== 'pinch') {
+            if (isSvgSource && fillEnable.checked && pointerDownPos && mode !== 'pinch') {
                 const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
                 if (dist < 5) {
                     const elem = document.elementFromPoint(e.clientX, e.clientY);
@@ -1568,6 +1590,8 @@
             
             finalContours = [];
             finalFillLines = [];
+            finalLines = [];
+            drawRegions = [];
             selectedContourIndices = new Set(); // 載入新檔案時重置選擇紀錄
             originalPixelData = null;
             
@@ -2180,38 +2204,17 @@
                     return resamplePath(path, segPx);
                 });
             } else {
-                const w = previewCanvas.width, h = previewCanvas.height;
-                const pixels = pCtx.getImageData(0, 0, w, h).data;
-                const isBlack = (x, y) => pixels[(y * w + x) * 4] === 0;
-                const visited = new Uint8Array(w * h);
-                const mmToPx = w / targetW_mm;
-                
-                finalContours = [];
-                for (let y = 1; y < h - 1; y++) {
-                    for (let x = 1; x < w - 1; x++) {
-                        if (isBlack(x, y) && !visited[y * w + x]) {
-                            let isEdge = false;
-                            for(let dy=-1; dy<=1; dy++) for(let dx=-1; dx<=1; dx++) if(!isBlack(x+dx, y+dy)) { isEdge = true; break; }
-                            if (isEdge) {
-                                const raw = traceContour(x, y, visited, isBlack, w, h);
-                                if (raw.length > parseInt(noiseSlider.value)) {
-                                    let path = simplifyPath(raw, 0.5);
-                                    path = smoothPathChaikin(path, parseInt(smoothSlider.value));
-                                    path = resamplePath(path, parseFloat(segmentSlider.value) * mmToPx);
-                                    finalContours.push(path);
-                                }
-                            } else visited[y * w + x] = 1;
-                        }
-                    }
-                }
+                analyzeBitmap(targetW_mm);
             }
-            
+
             designImage.setAttribute('href', previewCanvas.toDataURL());
             designImage.setAttribute('width', previewCanvas.width);
             designImage.setAttribute('height', previewCanvas.height);
 
-            // 保留使用者先前的點選選擇，如無選擇則預設全選
-            if (!selectedContourIndices || selectedContourIndices.size === 0) {
+            // SVG / DXF：保留使用者先前的點選選擇，如無選擇則預設全選
+            if (!isSvgSource) {
+                selectedContourIndices = new Set();
+            } else if (!selectedContourIndices || selectedContourIndices.size === 0) {
                 selectedContourIndices = new Set(finalContours.map((_, i) => i));
             } else {
                 const validIndices = new Set();
@@ -2225,6 +2228,40 @@
             document.getElementById('loading-spinner').classList.add('hidden');
         }
 
+        // 點陣圖：以「線寬 / 4」的解析度重建黑白遮罩（像素數有上限），交給區域分析
+        const MASK_MAX_PX = 12e6;
+        function analyzeBitmap(targetW_mm) {
+            const srcW = previewCanvas.width, srcH = previewCanvas.height;
+            const lineMm = Math.max(0.1, parseFloat(lineWidthInput.value) || 1.0);
+            const up = Math.min(Math.max(1, (targetW_mm / srcW) / (lineMm / 4)), Math.sqrt(MASK_MAX_PX / (srcW * srcH)));
+            const w = Math.max(1, Math.round(srcW * up)), h = Math.max(1, Math.round(srcH * up));
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const g = c.getContext('2d');
+            g.fillStyle = '#ffffff';
+            g.fillRect(0, 0, w, h);
+            g.filter = `blur(${parseInt(smoothSlider.value) * 0.25 * up}px)`;   // 平滑度 = 先模糊再取門檻，去掉鋸齒與雜點
+            g.drawImage(originalImage, 0, 0, w, h);
+            const px = g.getImageData(0, 0, w, h).data, threshold = parseInt(thresholdSlider.value);
+            const mask = { w, h, data: new Uint8Array(w * h) };
+            for (let i = 0; i < w * h; i++) mask.data[i] = (px[i * 4] * 0.299 + px[i * 4 + 1] * 0.587 + px[i * 4 + 2] * 0.114) < threshold ? 1 : 0;
+            // 雜點過濾：外框周長（原圖像素）短於設定值的區域不畫，與舊版「輪廓點數」同義
+            const minLen = parseInt(noiseSlider.value) * up;
+            const perimeter = r => r.outline.reduce((s, p) => s + p.reduce((t, q, i) => t + Math.hypot(q.x - p[(i + 1) % p.length].x, q.y - p[(i + 1) % p.length].y), 0), 0);
+            drawRegions = GordixRegions.analyze(mask, { penPx: lineMm * w / targetW_mm }).filter(r => perimeter(r) > minLen);
+            drawRegions.forEach(r => { r.layerId = r.kind; });
+            regionScale = srcW / w;
+            syncLayers();
+        }
+
+        // 自動圖層：細線 → 中線；色塊 → 只外框，開了填滿就外框＋填滿
+        function syncLayers() {
+            drawLayers = [
+                { id: 'line', mode: 'center', visible: true },
+                { id: 'blob', mode: fillEnable.checked ? 'outline_fill' : 'outline', visible: true }
+            ];
+        }
+
         // 重新計算被選中圖形的填滿線條
         function recomputeFillLines() {
             let targetW_mm = parseFloat(widthInput.value);
@@ -2235,10 +2272,20 @@
 
             const currentScale = isSvgSource ? (1000 / targetW_mm) : (previewCanvas.width / targetW_mm);
             
-            // 僅篩選出使用者勾選/點選要填滿的輪廓
-            const activeContours = finalContours.filter((_, idx) => selectedContourIndices.has(idx));
-
-            const rawHatchLines = fillEnable.checked ? generateFillLines(activeContours, parseFloat(fillAngleSelect.value), fillSpacing_mm * currentScale) : [];
+            let rawHatchLines;
+            if (isSvgSource) {
+                // 僅篩選出使用者勾選/點選要填滿的輪廓
+                const activeContours = finalContours.filter((_, idx) => selectedContourIndices.has(idx));
+                finalLines = [];
+                rawHatchLines = fillEnable.checked ? generateFillLines(activeContours, parseFloat(fillAngleSelect.value), fillSpacing_mm * currentScale) : [];
+            } else {
+                // 點陣圖：依圖層輸出中線、外框與填滿，填滿只在各自區域內，不會因為別的輪廓而內外顛倒
+                const out = GordixRegions.emit(drawRegions, drawLayers, { fillDeg: parseFloat(fillAngleSelect.value), fillSpacingPx: fillSpacing_mm * currentScale / regionScale });
+                const toCanvas = p => p.map(q => ({ x: q.x * regionScale, y: q.y * regionScale }));
+                finalLines = out.open.map(toCanvas);
+                finalContours = out.closed.map(toCanvas);
+                rawHatchLines = out.hatch.map(toCanvas);
+            }
             
             finalFillLines = [];
             const segPx = parseFloat(segmentSlider.value) * currentScale;
@@ -2302,13 +2349,20 @@
             renderWorkspace();
             updateStats(previewCanvas.width, previewCanvas.height);
             
-            if (finalContours.length > 0 || finalFillLines.length > 0) {
+            if (finalContours.length > 0 || finalFillLines.length > 0 || finalLines.length > 0) {
                 downloadBtn.disabled = false;
                 downloadBtn.className = "w-full py-4 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-500 transition flex flex-col items-center justify-center leading-tight shadow-xl cursor-pointer";
             } else {
                 downloadBtn.disabled = true;
                 downloadBtn.className = "w-full py-4 bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-black rounded-xl transition flex flex-col items-center justify-center leading-tight";
             }
+        }
+
+        // 線條粗細：Z 軸筆觸用校準線寬；點陣圖用設定的線寬（看得出會不會糊在一起）；其餘維持細線
+        function strokeWidthAttr(px) {
+            if (pen.on) return `stroke-width="${pen.wLight / mmPerPx()}"`;
+            if (!isSvgSource) return `stroke-width="${(parseFloat(lineWidthInput.value) || 1) / mmPerPx()}" opacity="0.8"`;
+            return `stroke-width="${px}" vector-effect="non-scaling-stroke"`;
         }
 
         function renderOverlay() {
@@ -2341,15 +2395,19 @@
 
             // 渲染帶互動事件的向量輪廓圖案，所有輪廓皆保持實線（#10b981）以確保外框繪製
             contourGroup.innerHTML = finalContours.map((p, idx) => {
-                const isSelected = selectedContourIndices.has(idx);
+                const isSelected = isSvgSource && selectedContourIndices.has(idx);
                 const strokeColor = "#10b981";
                 const showFillBg = fillEnable.checked && isSelected;
                 const fillColor = showFillBg ? "rgba(16, 185, 129, 0.15)" : "rgba(0, 0, 0, 0.001)";
-                const pointerEvents = fillEnable.checked ? "all" : "none";
-                const cursor = fillEnable.checked ? "pointer" : "default";
+                const clickable = isSvgSource && fillEnable.checked;
+                const pointerEvents = clickable ? "all" : "none";
+                const cursor = clickable ? "pointer" : "default";
                 const d = `M ${p[0].x} ${p[0].y} ${p.slice(1).map(pt => `L ${pt.x} ${pt.y}`).join(' ')} Z`;
                 
-                return `<path d="${d}" data-index="${idx}" fill="${fillColor}" stroke="${strokeColor}" ${pen.on ? `stroke-width="${pen.wLight / mmPerPx()}"` : `stroke-width="${showFillBg ? 1.8 : 1.2}" vector-effect="non-scaling-stroke"`} style="pointer-events: ${pointerEvents}; cursor: ${cursor}; transition: all 0.15s;" class="hover:stroke-amber-400 hover:stroke-2 hover:fill-amber-400/20" />`;
+                return `<path d="${d}" data-index="${idx}" fill="${fillColor}" stroke="${strokeColor}" ${strokeWidthAttr(showFillBg ? 1.8 : 1.2)} style="pointer-events: ${pointerEvents}; cursor: ${cursor}; transition: all 0.15s;" class="hover:stroke-amber-400 hover:stroke-2 hover:fill-amber-400/20" />`;
+            }).join('') + finalLines.map(p => {
+                const d = `M ${p[0].x} ${p[0].y} ${p.slice(1).map(pt => `L ${pt.x} ${pt.y}`).join(' ')}`;
+                return `<path d="${d}" fill="none" stroke="#10b981" ${strokeWidthAttr(1.2)} stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;" />`;
             }).join('');
 
             updateLayerVisibility();
@@ -2362,6 +2420,7 @@
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             const up = p => { minX = Math.min(minX, p.x*scale); maxX = Math.max(maxX, p.x*scale); minY = Math.min(minY, p.y*scale); maxY = Math.max(maxY, p.y*scale); };
             finalContours.forEach(p => p.forEach(up));
+            finalLines.forEach(p => p.forEach(up));
             finalFillLines.forEach(line => line.pts.forEach(up));
             
             const d = i18n[currentLang];
@@ -2369,6 +2428,7 @@
                 document.getElementById('coord-range').innerText = 
                     `${d.statsPrefix}: ${Math.abs(maxX-minX).toFixed(1)} x ${Math.abs(maxY-minY).toFixed(1)} mm\n` +
                     `${d.statsPos}: X${design.x.toFixed(1)} Y${design.y.toFixed(1)} mm\n` +
+                    (finalLines.length ? `${d.statsCenter}: ${finalLines.length}\n` : '') +
                     `${d.statsContours}: ${finalContours.length}\n` +
                     `${d.statsLines}: ${finalFillLines.length}`;
             } else {
@@ -2391,6 +2451,7 @@
                 minY = Math.min(minY, p.y * scale); maxY = Math.max(maxY, p.y * scale); 
             };
             finalContours.forEach(path => path.forEach(updateBounds));
+            finalLines.forEach(path => path.forEach(updateBounds));
             finalFillLines.forEach(line => line.pts.forEach(updateBounds));
             
             const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
@@ -2414,6 +2475,7 @@
 
             let allPaths = [];
             finalContours.forEach(path => allPaths.push({ pts: path, isClosed: true, isHatch: false }));
+            finalLines.forEach(path => allPaths.push({ pts: path, isClosed: false, isHatch: false }));
             finalFillLines.forEach(line => allPaths.push({ pts: line.pts, powers: line.powers, darks: line.darks, isClosed: false, isHatch: true }));
 
             let cx = 0, cy = 0; 
@@ -2495,6 +2557,10 @@
                 const d = path.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x * scale).toFixed(3)} ${(p.y * scale).toFixed(3)}`).join(' ') + ' Z';
                 svgStr += `  <path d="${d}" fill="none" stroke="#10b981" stroke-width="0.2" />\n`;
             });
+            finalLines.forEach(path => {
+                const d = path.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x * scale).toFixed(3)} ${(p.y * scale).toFixed(3)}`).join(' ');
+                svgStr += `  <path d="${d}" fill="none" stroke="#10b981" stroke-width="0.2" />\n`;
+            });
             
             const minS = parseFloat(minSPowerInput.value) || 0;
             const maxS = parseFloat(maxSPowerInput.value) || 255;
@@ -2516,7 +2582,7 @@
         }
 
         downloadBtn.onclick = () => {
-            if (!finalContours.length && !finalFillLines.length) return;
+            if (!finalContours.length && !finalFillLines.length && !finalLines.length) return;
             const isGcode = outputMode === "gcode";
             const content = isGcode ? generateGcode() : generateSVG();
             const blob = new Blob([content], { type: isGcode ? 'text/plain' : 'image/svg+xml' });
