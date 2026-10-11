@@ -82,5 +82,73 @@ const GordixTable = (() => {
         return Math.hypot(s1.x, s1.y) <= Math.hypot(s2.x, s2.y) ? s1 : s2;
     }
 
-    return { DEFAULTS, load, save, markConfigured, workRange, corners, locate };
+    // --- 板材：以「每個角到兩個相鄰治具的直線距離」三角定位；量測值存在瀏覽器，繪圖與 CNC 工具共用 ---
+    const BOARD_KEY = 'gordix-board';
+    const BOARD_CORNERS = [
+        { id: 'NW', jigs: ['NW', 'NE'] },
+        { id: 'NE', jigs: ['NW', 'NE'] },
+        { id: 'SE', jigs: ['SW', 'SE'] },
+        { id: 'SW', jigs: ['SW', 'SE'] }
+    ];
+
+    // 預設：一塊 300 × 200 mm 的板材放在工作台正中央，反推它的量測值
+    function defaultBoardMeasure(table) {
+        const jig = corners(table);
+        const at = { NW: { x: -150, y: 100 }, NE: { x: 150, y: 100 }, SE: { x: 150, y: -100 }, SW: { x: -150, y: -100 } };
+        const m = {};
+        BOARD_CORNERS.forEach(c => {
+            m[c.id] = c.jigs.map(j => Math.round(Math.hypot(at[c.id].x - jig[j].x, at[c.id].y - jig[j].y) * 10) / 10);
+        });
+        return m;
+    }
+
+    // 讀取板材設定 { on, m }；沒有存過時用預設值
+    function loadBoard(table) {
+        const board = { on: true, m: null };
+        try { Object.assign(board, JSON.parse(localStorage.getItem(BOARD_KEY)) || {}); } catch (e) { }
+        if (!board.m) board.m = defaultBoardMeasure(table);
+        return board;
+    }
+
+    function saveBoard(board) {
+        try { localStorage.setItem(BOARD_KEY, JSON.stringify(board)); } catch (e) { }
+    }
+
+    // 由量測值算出板材四角（機器座標）；量不出交點的角為 null
+    function boardCorners(table, m) {
+        const jig = corners(table);
+        const pts = {};
+        BOARD_CORNERS.forEach(c => {
+            const [a, b] = m[c.id] || [];
+            pts[c.id] = locate(jig[c.jigs[0]], jig[c.jigs[1]], a, b);
+        });
+        return pts;
+    }
+
+    // 依 NW → NE → SE → SW 順序的板材多邊形；有任何角定位失敗時回傳 null
+    function boardPolygon(table, m) {
+        const p = boardCorners(table, m);
+        const order = ['NW', 'NE', 'SE', 'SW'];
+        return order.every(k => p[k]) ? order.map(k => p[k]) : null;
+    }
+
+    function boardCenter(table, m) {
+        const poly = boardPolygon(table, m);
+        if (!poly) return { x: 0, y: 0 };
+        return { x: poly.reduce((s, p) => s + p.x, 0) / 4, y: poly.reduce((s, p) => s + p.y, 0) / 4 };
+    }
+
+    function insidePolygon(pt, poly) {
+        let inside = false;
+        for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+            const a = poly[i], b = poly[j];
+            if ((a.y > pt.y) !== (b.y > pt.y) && pt.x < (b.x - a.x) * (pt.y - a.y) / (b.y - a.y) + a.x) inside = !inside;
+        }
+        return inside;
+    }
+
+    return {
+        DEFAULTS, load, save, markConfigured, workRange, corners, locate,
+        BOARD_CORNERS, defaultBoardMeasure, loadBoard, saveBoard, boardCorners, boardPolygon, boardCenter, insidePolygon
+    };
 })();

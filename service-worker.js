@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gordix-studio-v2';
+const CACHE_NAME = 'gordix-studio-v3';
 const ASSETS = [
   './index.html',
   './CNC.html',
@@ -8,6 +8,9 @@ const ASSETS = [
   './vc.html',
   './params.html',
   './gordix-table.js',
+  './gordix-workspace.js',
+  './gordix-import.js',
+  './gordix-cam.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
