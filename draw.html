@@ -229,6 +229,16 @@
                     </div>
                 </section>
 
+                <!-- 圖層：點陣圖自動分成細線 / 色塊；每層可勾選、選畫法、調順序（上面的先畫），點預覽上的區域可移到別的圖層 -->
+                <section id="layer-section" class="hidden p-4 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 transition-colors duration-300">
+                    <div class="flex items-center justify-between">
+                        <label data-i18n="layersTitle" class="text-[10px] font-black text-slate-500 dark:text-slate-400 tracking-widest">圖層（上面的先畫）</label>
+                        <button id="btn-add-layer" data-i18n="addLayer" class="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-bold transition">＋ 新增圖層</button>
+                    </div>
+                    <div id="layer-list" class="space-y-1.5"></div>
+                    <p data-i18n="layersTip" class="text-[9px] text-slate-500 dark:text-slate-400">點預覽上的線條或色塊，可以把它移到別的圖層；換圖層就是換畫法。</p>
+                </section>
+
                 <!-- 填滿設定 -->
                 <section class="p-4 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 transition-colors duration-300">
                     <div class="flex items-center justify-between">
@@ -236,8 +246,8 @@
                         <input type="checkbox" id="enable-fill" class="w-4 h-4 accent-blue-500 rounded">
                     </div>
                     <div id="fill-settings-group" class="space-y-3 transition-opacity opacity-30 pointer-events-none">
-                        <!-- 點擊圖形提示與快速切換按鈕 -->
-                        <div class="flex items-center justify-between bg-blue-50/50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-200/50 dark:border-blue-500/20">
+                        <!-- 點擊圖形提示與快速切換按鈕（只有 SVG / DXF；點陣圖改用圖層） -->
+                        <div id="fill-pick-row" class="flex items-center justify-between bg-blue-50/50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-200/50 dark:border-blue-500/20">
                             <span id="i18n-label-fill-tip" class="text-[9px] text-blue-600 dark:text-blue-300 font-bold">💡 點選預覽圖形可個別開關填滿</span>
                             <div class="flex gap-1">
                                 <button id="btn-select-all-fill" class="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-bold transition">全選</button>
@@ -310,6 +320,7 @@
                                 <rect id="design-hit" fill="transparent" pointer-events="all"></rect>
                                 <g id="hatch-group"></g>
                                 <g id="contour-group"></g>
+                                <g id="region-highlight" pointer-events="none"></g>
                             </g>
                         </g>
                         <g id="ws-chrome"></g>
@@ -318,6 +329,7 @@
                     <div id="empty-state" class="absolute bottom-4 inset-x-0 flex justify-center pointer-events-none">
                         <p id="i18n-empty-msg" class="text-xs font-black tracking-widest px-3 py-1.5 rounded-lg bg-slate-900/70 text-slate-200">請上傳圖片以開始</p>
                     </div>
+                    <div id="region-menu" class="hidden absolute z-20 min-w-[8rem] p-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 shadow-xl text-[11px] font-bold"></div>
                     <div id="ws-warning" class="hidden absolute top-3 inset-x-3 flex flex-col items-center gap-1 pointer-events-none"></div>
                     <button id="btn-fit-view" class="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-800/80 text-white border border-slate-600 hover:bg-slate-700">全景</button>
                 </div>
@@ -549,6 +561,22 @@
                 lineWidthLabel: "線寬（筆尖 / 雷射光點）",
                 lineWidthTip: "比線寬細的線條只畫一條中線；比較粗的區塊往內縮半個線寬畫外框，開填滿時再補內部。",
                 statsCenter: "中線路徑",
+                layersTitle: "圖層（上面的先畫）",
+                addLayer: "＋ 新增圖層",
+                layersTip: "點預覽上的線條或色塊，可以把它移到別的圖層；換圖層就是換畫法。",
+                layer_line: "細線",
+                layer_blob: "色塊",
+                layerNew: "圖層",
+                layerCount: "區域數",
+                layerUp: "往上（先畫）",
+                layerDown: "往下（後畫）",
+                layerDel: "刪除圖層（裡面的區域回到自動分組）",
+                modeCenter: "中線",
+                modeOutlineFill: "外框＋填滿",
+                modeOutline: "只外框",
+                modeFill: "只填滿",
+                moveTo: "移到圖層：",
+                newLayer: "＋ 新圖層",
                 penzDiamWarn: "⚠ 筆桿直徑還是 0：筆的 Y 方向補償不會套用，畫的位置可能偏移。請在上方「筆桿直徑」填入實際數值。",
                 advancedOff: "進階",
                 advancedOn: "進階 ✓",
@@ -640,6 +668,22 @@
                 lineWidthLabel: "Line width (pen tip / laser spot)",
                 lineWidthTip: "Lines thinner than this are drawn once along the centerline; thicker areas get an outline inset by half the width, filled inside when Fill is on.",
                 statsCenter: "Centerlines",
+                layersTitle: "Layers (top is drawn first)",
+                addLayer: "+ Add layer",
+                layersTip: "Click a line or area in the preview to move it to another layer; the layer decides how it is drawn.",
+                layer_line: "Lines",
+                layer_blob: "Solids",
+                layerNew: "Layer",
+                layerCount: "Areas",
+                layerUp: "Move up (draw earlier)",
+                layerDown: "Move down (draw later)",
+                layerDel: "Delete layer (its areas return to the automatic groups)",
+                modeCenter: "Centerline",
+                modeOutlineFill: "Outline + fill",
+                modeOutline: "Outline only",
+                modeFill: "Fill only",
+                moveTo: "Move to layer:",
+                newLayer: "+ New layer",
                 penzDiamWarn: "⚠ Pen body diameter is still 0: the pen's Y-offset compensation is not applied and the drawing may be shifted. Enter the real value in Pen Body Dia. above.",
                 advancedOff: "Advanced",
                 advancedOn: "Advanced ✓",
@@ -738,6 +782,8 @@
             document.getElementById('i18n-board-tip').innerText = data.boardTip;
             renderBoardInputs();
             document.querySelectorAll('[data-i18n]').forEach(el => { el.innerText = data[el.dataset.i18n]; });
+            renderLayerPanel();
+            closeRegionMenu();
             renderPenPanel();
             renderAdvancedState();
             document.getElementById('btn-obj-board').innerText = data.btnObjBoard;
@@ -796,6 +842,9 @@
         const pCtx = previewCanvas.getContext('2d', { willReadFrequently: true });
         const hatchGroup = document.getElementById('hatch-group');
         const contourGroup = document.getElementById('contour-group');
+        const layerList = document.getElementById('layer-list');
+        const regionMenu = document.getElementById('region-menu');
+        const regionHighlight = document.getElementById('region-highlight');
         
         const thresholdSlider = document.getElementById('threshold-slider');
         const thresholdValText = document.getElementById('threshold-val-text');
@@ -845,6 +894,13 @@
         let drawRegions = [];     // 點陣圖區域分析結果（遮罩像素座標）
         let drawLayers = [];      // 圖層，順序 = 畫的順序
         let regionScale = 1;      // 遮罩像素 → 預覽畫布像素
+        let regionPenPx = 1;      // 線寬（遮罩像素），點選區域的容差用
+        let regionOverrides = []; // 手動指定圖層：{x, y, tol（預覽畫布像素）, layerId}；重新分析後依位置找回同一塊
+        let menuRegion = null;    // 區域選單開著時點到的區域與位置
+        let layerSeq = 1;         // 新增圖層的編號
+        const AUTO_LAYERS = ['line', 'blob'];
+        const LAYER_COLORS = ['#10b981', '#8b5cf6', '#f43f5e', '#0ea5e9', '#f59e0b', '#64748b'];
+        const FILL_MODES = ['outline_fill', 'fill'];
         let pointerDownPos = { x: 0, y: 0 };   // 記錄點擊初始位置以過濾拖曳
 
         let processDebounceTimeout;
@@ -995,11 +1051,20 @@
             return currentWidthMm() / previewCanvas.width;
         }
 
-        // 輪廓與填滿線的外框（預覽畫布像素座標）
+        // 輪廓、中線與填滿線的外框（預覽畫布像素座標）。
+        // 點陣圖以全部區域（含隱藏的圖層）為準：關掉某一層時其他層不會跟著移位，分次畫也對得上。
         function designBoxPx() {
             let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
             const up = p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); };
+            if (!isSvgSource && drawRegions.length) {
+                // bbox 是像素中心座標，像素本身往外各半格
+                drawRegions.forEach(r => {
+                    up({ x: (r.bbox[0] - 0.5) * regionScale, y: (r.bbox[1] - 0.5) * regionScale });
+                    up({ x: (r.bbox[2] + 0.5) * regionScale, y: (r.bbox[3] + 0.5) * regionScale });
+                });
+            }
             finalContours.forEach(path => path.forEach(up));
+            finalLines.forEach(path => path.forEach(up));
             finalFillLines.forEach(line => line.pts.forEach(up));
             if (minX === Infinity) return { minX: 0, minY: 0, maxX: previewCanvas.width, maxY: previewCanvas.height };
             return { minX, minY, maxX, maxY };
@@ -1209,6 +1274,7 @@
             drag.pointers.set(e.pointerId, e);
             workspace.setPointerCapture(e.pointerId);
             pointerDownPos = { x: e.clientX, y: e.clientY };
+            closeRegionMenu();
             if (drag.pointers.size === 2) {
                 const [a, b] = [...drag.pointers.values()];
                 drag.mode = 'pinch';
@@ -1290,6 +1356,12 @@
                         }
                     }
                 }
+            }
+
+            // 點陣圖：點一下（沒有拖動）區域 → 選單，選要移到哪個圖層
+            if (!isSvgSource && drawRegions.length && pointerDownPos && mode !== 'pinch' && mode !== 'resize'
+                && Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) < 5) {
+                openRegionMenu(e.clientX, e.clientY);
             }
         }
         workspace.addEventListener('pointerup', endPointer);
@@ -1592,6 +1664,9 @@
             finalFillLines = [];
             finalLines = [];
             drawRegions = [];
+            drawLayers = [];
+            regionOverrides = [];
+            closeRegionMenu();
             selectedContourIndices = new Set(); // 載入新檔案時重置選擇紀錄
             originalPixelData = null;
             
@@ -2000,13 +2075,18 @@
             filenameLabel.innerText = `${originalFileName}${suffix}${ext}`;
         }
 
-        fillEnable.addEventListener('change', () => {
+        function applyFillUi() {
             fillGroup.style.opacity = fillEnable.checked ? "1" : "0.3";
             fillGroup.style.pointerEvents = fillEnable.checked ? "auto" : "none";
             legendFillBox.style.display = fillEnable.checked ? "flex" : "none";
             toggleGrayscalePowerUI();
             renderAdvancedState();
             updateDownloadFileName();
+        }
+
+        fillEnable.addEventListener('change', () => {
+            if (!isSvgSource) setFillModes(fillEnable.checked);
+            applyFillUi();
             if (originalImage) {
                 triggerLiveProcess();
             }
@@ -2211,6 +2291,8 @@
             designImage.setAttribute('width', previewCanvas.width);
             designImage.setAttribute('height', previewCanvas.height);
 
+            document.getElementById('fill-pick-row').classList.toggle('hidden', !isSvgSource);
+
             // SVG / DXF：保留使用者先前的點選選擇，如無選擇則預設全選
             if (!isSvgSource) {
                 selectedContourIndices = new Set();
@@ -2249,18 +2331,178 @@
             const minLen = parseInt(noiseSlider.value) * up;
             const perimeter = r => r.outline.reduce((s, p) => s + p.reduce((t, q, i) => t + Math.hypot(q.x - p[(i + 1) % p.length].x, q.y - p[(i + 1) % p.length].y), 0), 0);
             drawRegions = GordixRegions.analyze(mask, { penPx: lineMm * w / targetW_mm }).filter(r => perimeter(r) > minLen);
-            drawRegions.forEach(r => { r.layerId = r.kind; });
             regionScale = srcW / w;
-            syncLayers();
+            regionPenPx = lineMm * w / targetW_mm;
+            if (!drawLayers.length) drawLayers = defaultLayers();
+            // 先自動分組，再套用手動指定（依位置找回同一塊；指定的圖層被刪了就不套）
+            drawRegions.forEach(r => { r.layerId = r.kind; });
+            regionOverrides.forEach(o => {
+                const r = regionAt(o.x, o.y, o.tol);
+                if (r && drawLayers.some(l => l.id === o.layerId)) r.layerId = o.layerId;
+            });
+            closeRegionMenu();
         }
 
-        // 自動圖層：細線 → 中線；色塊 → 只外框，開了填滿就外框＋填滿
-        function syncLayers() {
-            drawLayers = [
-                { id: 'line', mode: 'center', visible: true },
-                { id: 'blob', mode: fillEnable.checked ? 'outline_fill' : 'outline', visible: true }
+        // ===== 圖層 =====
+        // 自動分組：細線 → 中線；色塊 → 只外框（開了填滿就外框＋填滿）。圖層設定在重新分析時保留，換檔才重設。
+        function defaultLayers() {
+            return [
+                { id: 'line', name: '', mode: 'center', visible: true, color: LAYER_COLORS[0] },
+                { id: 'blob', name: '', mode: fillEnable.checked ? 'outline_fill' : 'outline', visible: true, color: LAYER_COLORS[1] }
             ];
         }
+
+        function layerName(l) {
+            return l.name || i18n[currentLang]['layer_' + l.id] || '';
+        }
+
+        function escAttr(v) {
+            return String(v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+        }
+
+        // 點陣圖的「填滿」勾選 ＝ 有圖層畫填滿：勾選時色塊層補上填滿，取消時每一層都拿掉填滿
+        function setFillModes(on) {
+            drawLayers.forEach(l => {
+                if (on && l.id === 'blob' && l.mode === 'outline') l.mode = 'outline_fill';
+                if (!on && FILL_MODES.includes(l.mode)) l.mode = 'outline';
+            });
+        }
+
+        // 反過來：圖層畫法改了，同步「填滿」勾選與相關介面
+        function syncFillCheckbox() {
+            const on = drawLayers.some(l => FILL_MODES.includes(l.mode));
+            if (on === fillEnable.checked) return;
+            fillEnable.checked = on;
+            applyFillUi();
+        }
+
+        // 預覽畫布像素 (x, y) 點到哪一塊：在外框內（奇偶規則）或離它的線 tol 以內，取最近的一塊
+        function regionAt(x, y, tol) {
+            const q = { x: x / regionScale, y: y / regionScale };
+            const t = Math.max(regionPenPx / 2, tol / regionScale);
+            const near = (paths, closed) => paths.reduce((m, p) => {
+                for (let i = 0; i < p.length - (closed ? 0 : 1); i++) m = Math.min(m, distToSegment(q, p[i], p[(i + 1) % p.length]));
+                return m;
+            }, Infinity);
+            let best = null, bestD = t * t;
+            for (const r of drawRegions) {
+                const [x0, y0, x1, y1] = r.bbox;
+                if (q.x < x0 - t - 1 || q.x > x1 + t + 1 || q.y < y0 - t - 1 || q.y > y1 + t + 1) continue;
+                const inside = r.outline.reduce((c, p) => c !== insidePolygon(q, p), false);
+                const d = inside ? 0 : Math.min(near(r.outline, true), near(r.center, false));
+                if (d <= bestD) { best = r; bestD = d; }
+            }
+            return best;
+        }
+
+        // 圖層面板（目前只有點陣圖）：每層＝勾選、顏色、名稱、區域數、刪除 / 畫法、上下移（上面的先畫）
+        function renderLayerPanel() {
+            document.getElementById('layer-section').classList.toggle('hidden', isSvgSource || !drawLayers.length);
+            const d = i18n[currentLang];
+            const modes = [['center', d.modeCenter], ['outline_fill', d.modeOutlineFill], ['outline', d.modeOutline], ['fill', d.modeFill]];
+            const btn = 'px-1.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-30';
+            layerList.innerHTML = drawLayers.map((l, i) => `
+                <div data-layer="${l.id}" class="p-1.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 space-y-1">
+                    <div class="flex items-center gap-1.5">
+                        <input type="checkbox" data-act="visible" ${l.visible ? 'checked' : ''} class="w-3.5 h-3.5 accent-blue-500">
+                        <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${l.color}"></span>
+                        <input data-act="name" value="${escAttr(layerName(l))}" class="min-w-0 flex-1 bg-transparent text-[11px] font-bold text-slate-700 dark:text-slate-200 outline-none">
+                        <span data-act="count" title="${d.layerCount}" class="text-[10px] font-mono text-slate-400">${drawRegions.filter(r => r.layerId === l.id).length}</span>
+                        ${AUTO_LAYERS.includes(l.id) ? '' : `<button data-act="del" title="${d.layerDel}" class="${btn}">✕</button>`}
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <select data-act="mode" class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-1 rounded text-[10px] text-slate-800 dark:text-white outline-none">
+                            ${modes.map(([v, t]) => `<option value="${v}" ${v === l.mode ? 'selected' : ''}>${t}</option>`).join('')}
+                        </select>
+                        <button data-act="up" title="${d.layerUp}" ${i === 0 ? 'disabled' : ''} class="${btn}">↑</button>
+                        <button data-act="down" title="${d.layerDown}" ${i === drawLayers.length - 1 ? 'disabled' : ''} class="${btn}">↓</button>
+                    </div>
+                </div>`).join('');
+        }
+
+        function layerOf(el) {
+            const row = el.closest('[data-layer]');
+            return row && drawLayers.find(l => l.id === row.dataset.layer);
+        }
+
+        layerList.addEventListener('change', e => {
+            const l = layerOf(e.target);
+            if (!l) return;
+            if (e.target.dataset.act === 'visible') l.visible = e.target.checked;
+            else if (e.target.dataset.act === 'mode') { l.mode = e.target.value; syncFillCheckbox(); }
+            else return;
+            recomputeFillLines();
+        });
+        layerList.addEventListener('input', e => {
+            if (e.target.dataset.act === 'name') layerOf(e.target).name = e.target.value;
+        });
+        layerList.addEventListener('click', e => {
+            const b = e.target.closest('button[data-act]');
+            if (!b) return;
+            const i = drawLayers.indexOf(layerOf(b)), j = { up: i - 1, down: i + 1 }[b.dataset.act];
+            if (j !== undefined) [drawLayers[i], drawLayers[j]] = [drawLayers[j], drawLayers[i]];
+            if (b.dataset.act === 'del') deleteLayer(drawLayers[i]);
+            recomputeFillLines();
+        });
+        document.getElementById('btn-add-layer').onclick = () => { addLayer('outline'); recomputeFillLines(); };
+
+        function addLayer(mode) {
+            const l = { id: 'L' + layerSeq++, name: `${i18n[currentLang].layerNew} ${drawLayers.length + 1}`, mode, visible: true,
+                        color: LAYER_COLORS[drawLayers.length % LAYER_COLORS.length] };
+            drawLayers.push(l);
+            return l;
+        }
+
+        // 刪除圖層：裡面的區域回到自動分組（細線 / 色塊），指到它的手動指定一併清掉
+        function deleteLayer(l) {
+            drawLayers = drawLayers.filter(x => x !== l);
+            regionOverrides = regionOverrides.filter(o => o.layerId !== l.id);
+            drawRegions.forEach(r => { if (r.layerId === l.id) r.layerId = r.kind; });
+        }
+
+        // 點預覽上的區域 → 小選單：移到哪個圖層（換圖層＝換畫法，例如被當成色塊的粗線移到細線層改畫中線）
+        function openRegionMenu(clientX, clientY) {
+            const m = designInner.getScreenCTM();
+            const pt = workspace.createSVGPoint();
+            pt.x = clientX; pt.y = clientY;
+            const p = pt.matrixTransform(m.inverse());
+            const tol = 6 / m.a;   // 6 個螢幕像素換成畫布像素
+            const r = regionAt(p.x, p.y, tol);
+            if (!r) return closeRegionMenu();
+            menuRegion = { region: r, x: p.x, y: p.y, tol };
+            const d = i18n[currentLang];
+            const item = 'w-full flex items-center gap-1.5 px-2 py-1 rounded text-left hover:bg-blue-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200';
+            regionMenu.innerHTML = `<div class="px-2 py-1 text-[10px] text-slate-400">${d.moveTo}</div>` +
+                drawLayers.map(l => `<button data-move="${l.id}" class="${item}"><span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${l.color}"></span>${escAttr(layerName(l))}${l.id === r.layerId ? ' ✓' : ''}</button>`).join('') +
+                `<button data-move="new" class="${item} text-blue-600 dark:text-blue-400">${d.newLayer}</button>`;
+            regionMenu.classList.remove('hidden');
+            const box = container.getBoundingClientRect();
+            regionMenu.style.left = Math.max(0, Math.min(clientX - box.left, box.width - regionMenu.offsetWidth - 4)) + 'px';
+            regionMenu.style.top = Math.max(0, Math.min(clientY - box.top, box.height - regionMenu.offsetHeight - 4)) + 'px';
+            const path = (pts, closed) => `M ${pts.map(q => `${q.x * regionScale} ${q.y * regionScale}`).join(' L ')}${closed ? ' Z' : ''}`;
+            regionHighlight.innerHTML = [...r.outline.map(q => path(q, true)), ...r.center.map(q => path(q, false))]
+                .map(dd => `<path d="${dd}" fill="none" stroke="#f59e0b" stroke-width="3" vector-effect="non-scaling-stroke" />`).join('');
+        }
+
+        function closeRegionMenu() {
+            menuRegion = null;
+            regionMenu.classList.add('hidden');
+            regionHighlight.innerHTML = '';
+        }
+
+        regionMenu.addEventListener('click', e => {
+            const b = e.target.closest('[data-move]');
+            if (!b || !menuRegion) return;
+            const from = drawLayers.find(l => l.id === menuRegion.region.layerId);
+            const layer = b.dataset.move === 'new' ? addLayer(from ? from.mode : 'outline') : drawLayers.find(l => l.id === b.dataset.move);
+            // 同一塊之前的手動指定作廢，只留這次的
+            regionOverrides = regionOverrides.filter(o => regionAt(o.x, o.y, o.tol) !== menuRegion.region);
+            regionOverrides.push({ x: menuRegion.x, y: menuRegion.y, tol: menuRegion.tol, layerId: layer.id });
+            menuRegion.region.layerId = layer.id;
+            closeRegionMenu();
+            recomputeFillLines();
+        });
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeRegionMenu(); });
 
         // 重新計算被選中圖形的填滿線條
         function recomputeFillLines() {
@@ -2279,12 +2521,17 @@
                 finalLines = [];
                 rawHatchLines = fillEnable.checked ? generateFillLines(activeContours, parseFloat(fillAngleSelect.value), fillSpacing_mm * currentScale) : [];
             } else {
-                // 點陣圖：依圖層輸出中線、外框與填滿，填滿只在各自區域內，不會因為別的輪廓而內外顛倒
-                const out = GordixRegions.emit(drawRegions, drawLayers, { fillDeg: parseFloat(fillAngleSelect.value), fillSpacingPx: fillSpacing_mm * currentScale / regionScale });
-                const toCanvas = p => p.map(q => ({ x: q.x * regionScale, y: q.y * regionScale }));
-                finalLines = out.open.map(toCanvas);
-                finalContours = out.closed.map(toCanvas);
-                rawHatchLines = out.hatch.map(toCanvas);
+                // 點陣圖：依圖層輸出中線、外框與填滿，填滿只在各自區域內，不會因為別的輪廓而內外顛倒。
+                // 每條路徑記下圖層順位（layer），G-code 一層畫完才換下一層，預覽也用圖層顏色。
+                const opts = { fillDeg: parseFloat(fillAngleSelect.value), fillSpacingPx: fillSpacing_mm * currentScale / regionScale };
+                const toCanvas = rank => p => Object.assign(p.map(q => ({ x: q.x * regionScale, y: q.y * regionScale })), { layer: rank });
+                finalLines = []; finalContours = []; rawHatchLines = [];
+                drawLayers.forEach((layer, rank) => {
+                    const out = GordixRegions.emit(drawRegions, [layer], opts);
+                    finalLines = finalLines.concat(out.open.map(toCanvas(rank)));
+                    finalContours = finalContours.concat(out.closed.map(toCanvas(rank)));
+                    rawHatchLines = rawHatchLines.concat(out.hatch.map(toCanvas(rank)));
+                });
             }
             
             finalFillLines = [];
@@ -2340,11 +2587,12 @@
                 }
                 
                 if (pts.length > 1) {
-                    finalFillLines.push({ pts: pts, powers: powers, darks: darks });
+                    finalFillLines.push({ pts: pts, powers: powers, darks: darks, layer: line.layer });
                 }
             });
 
             renderOverlay();
+            renderLayerPanel();
             updateDesignTransform();
             renderWorkspace();
             updateStats(previewCanvas.width, previewCanvas.height);
@@ -2367,6 +2615,7 @@
 
         function renderOverlay() {
             let hatchHtml = '';
+            const layerColor = p => (drawLayers[p.layer] || {}).color || "#10b981";
             
             const minS = parseFloat(minSPowerInput.value) || 0;
             const maxS = parseFloat(maxSPowerInput.value) || 255;
@@ -2396,7 +2645,7 @@
             // 渲染帶互動事件的向量輪廓圖案，所有輪廓皆保持實線（#10b981）以確保外框繪製
             contourGroup.innerHTML = finalContours.map((p, idx) => {
                 const isSelected = isSvgSource && selectedContourIndices.has(idx);
-                const strokeColor = "#10b981";
+                const strokeColor = layerColor(p);
                 const showFillBg = fillEnable.checked && isSelected;
                 const fillColor = showFillBg ? "rgba(16, 185, 129, 0.15)" : "rgba(0, 0, 0, 0.001)";
                 const clickable = isSvgSource && fillEnable.checked;
@@ -2407,7 +2656,7 @@
                 return `<path d="${d}" data-index="${idx}" fill="${fillColor}" stroke="${strokeColor}" ${strokeWidthAttr(showFillBg ? 1.8 : 1.2)} style="pointer-events: ${pointerEvents}; cursor: ${cursor}; transition: all 0.15s;" class="hover:stroke-amber-400 hover:stroke-2 hover:fill-amber-400/20" />`;
             }).join('') + finalLines.map(p => {
                 const d = `M ${p[0].x} ${p[0].y} ${p.slice(1).map(pt => `L ${pt.x} ${pt.y}`).join(' ')}`;
-                return `<path d="${d}" fill="none" stroke="#10b981" ${strokeWidthAttr(1.2)} stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;" />`;
+                return `<path d="${d}" fill="none" stroke="${layerColor(p)}" ${strokeWidthAttr(1.2)} stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;" />`;
             }).join('');
 
             updateLayerVisibility();
@@ -2445,16 +2694,9 @@
             const dPen = parseFloat(penDiamInput.value) || 0;
             const yOffset = (dPen === 0) ? 0 : (dPen / 2) - 12.6;
 
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-            const updateBounds = p => { 
-                minX = Math.min(minX, p.x * scale); maxX = Math.max(maxX, p.x * scale); 
-                minY = Math.min(minY, p.y * scale); maxY = Math.max(maxY, p.y * scale); 
-            };
-            finalContours.forEach(path => path.forEach(updateBounds));
-            finalLines.forEach(path => path.forEach(updateBounds));
-            finalFillLines.forEach(line => line.pts.forEach(updateBounds));
-            
-            const midX = (minX + maxX) / 2, midY = (minY + maxY) / 2;
+            // 物件中心用預覽同一個外框，G-code 位置才會和預覽一致
+            const b = designBoxPx();
+            const midX = (b.minX * scale + b.maxX * scale) / 2, midY = (b.minY * scale + b.maxY * scale) / 2;
 
             const tx = x => (x - midX + design.x).toFixed(3);
             const ty = y => (midY - (y * scale) + yOffset + design.y).toFixed(3); 
@@ -2474,9 +2716,9 @@
             }
 
             let allPaths = [];
-            finalContours.forEach(path => allPaths.push({ pts: path, isClosed: true, isHatch: false }));
-            finalLines.forEach(path => allPaths.push({ pts: path, isClosed: false, isHatch: false }));
-            finalFillLines.forEach(line => allPaths.push({ pts: line.pts, powers: line.powers, darks: line.darks, isClosed: false, isHatch: true }));
+            finalContours.forEach(path => allPaths.push({ pts: path, isClosed: true, isHatch: false, layer: path.layer || 0 }));
+            finalLines.forEach(path => allPaths.push({ pts: path, isClosed: false, isHatch: false, layer: path.layer || 0 }));
+            finalFillLines.forEach(line => allPaths.push({ pts: line.pts, powers: line.powers, darks: line.darks, isClosed: false, isHatch: true, layer: line.layer || 0 }));
 
             let cx = 0, cy = 0; 
 
@@ -2484,8 +2726,11 @@
                 let bestIdx = -1;
                 let minDist = Infinity;
                 let reversePath = false;
+                // 圖層順序 = 畫的順序：最前面那一層畫完才換下一層，層內就近挑下一筆（SVG 只有一層，與舊版相同）
+                const curLayer = allPaths.reduce((m, path) => Math.min(m, path.layer), Infinity);
 
                 for (let i = 0; i < allPaths.length; i++) {
+                    if (allPaths[i].layer !== curLayer) continue;
                     const p = allPaths[i].pts;
                     const dStart = Math.pow(parseFloat(tx(p[0].x * scale)) - cx, 2) + Math.pow(parseFloat(ty(p[0].y)) - cy, 2);
                     if (dStart < minDist) {
