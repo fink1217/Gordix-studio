@@ -1,4 +1,4 @@
-const CACHE_NAME = 'gordix-studio-v3';
+const CACHE_NAME = 'gordix-studio-v4';
 const ASSETS = [
   './index.html',
   './CNC.html',
@@ -11,10 +11,14 @@ const ASSETS = [
   './gordix-workspace.js',
   './gordix-import.js',
   './gordix-cam.js',
+  './gordix-regions.js',
+  './gordix-preview.js',
   './manifest.json',
   './icon-192.png',
   './icon-512.png',
   'https://cdn.tailwindcss.com',
+  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+  'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
 ];
 
