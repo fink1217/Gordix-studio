@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Draw Converter</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 3D G-code 預覽（與 CNC.html 相同版本） -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class'
@@ -83,6 +86,13 @@
         }
         .layer-hidden {
             display: none !important;
+        }
+        /* G-code 預覽拉到中途時設計輪廓變淡，已畫 / 未畫的路徑才看得清楚 */
+        .gcode-dim #contour-group, .gcode-dim #hatch-group {
+            opacity: 0.15;
+        }
+        .gcode-dim #design-image {
+            opacity: 0.08;
         }
         input[type=range] {
             accent-color: #3b82f6;
@@ -303,10 +313,17 @@
                         </div>
                     </div>
                     
-                    <div class="flex items-center bg-slate-200 dark:bg-slate-800/80 rounded-lg p-1 border border-slate-300 dark:border-slate-700 gap-1 transition-colors duration-300">
-                        <button id="toggle-image" class="px-3 py-1 rounded text-[10px] font-bold transition-all bg-blue-600 text-white">底圖</button>
-                        <button id="toggle-contour" class="px-3 py-1 rounded text-[10px] font-bold transition-all bg-emerald-600 text-white">輪廓</button>
-                        <button id="toggle-hatch" class="px-3 py-1 rounded text-[10px] font-bold transition-all bg-indigo-600 text-white">填滿</button>
+                    <div class="flex items-center gap-2">
+                        <!-- 2D 工作台 / 3D G-code 預覽 -->
+                        <div class="flex items-center bg-slate-200 dark:bg-slate-800/80 rounded-lg p-1 border border-slate-300 dark:border-slate-700 gap-1 transition-colors duration-300">
+                            <button id="view-2d" class="px-3 py-1 rounded text-[10px] font-bold transition-all">2D</button>
+                            <button id="view-3d" class="px-3 py-1 rounded text-[10px] font-bold transition-all">3D</button>
+                        </div>
+                        <div class="flex items-center bg-slate-200 dark:bg-slate-800/80 rounded-lg p-1 border border-slate-300 dark:border-slate-700 gap-1 transition-colors duration-300">
+                            <button id="toggle-image" class="px-3 py-1 rounded text-[10px] font-bold transition-all bg-blue-600 text-white">底圖</button>
+                            <button id="toggle-contour" class="px-3 py-1 rounded text-[10px] font-bold transition-all bg-emerald-600 text-white">輪廓</button>
+                            <button id="toggle-hatch" class="px-3 py-1 rounded text-[10px] font-bold transition-all bg-indigo-600 text-white">填滿</button>
+                        </div>
                     </div>
                 </div>
                 
@@ -323,8 +340,10 @@
                                 <g id="region-highlight" pointer-events="none"></g>
                             </g>
                         </g>
+                        <g id="ws-gcode" style="display: none" pointer-events="none"></g>
                         <g id="ws-chrome"></g>
                     </svg>
+                    <div id="view3d" class="hidden absolute inset-0"></div>
                     <canvas id="preview-canvas"></canvas>
                     <div id="empty-state" class="absolute bottom-4 inset-x-0 flex justify-center pointer-events-none">
                         <p id="i18n-empty-msg" class="text-xs font-black tracking-widest px-3 py-1.5 rounded-lg bg-slate-900/70 text-slate-200">請上傳圖片以開始</p>
@@ -332,6 +351,12 @@
                     <div id="region-menu" class="hidden absolute z-20 min-w-[8rem] p-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 shadow-xl text-[11px] font-bold"></div>
                     <div id="ws-warning" class="hidden absolute top-3 inset-x-3 flex flex-col items-center gap-1 pointer-events-none"></div>
                     <button id="btn-fit-view" class="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-800/80 text-white border border-slate-600 hover:bg-slate-700">全景</button>
+                </div>
+                <!-- G-code 進度：機器面板的百分比是行數比例；拉到同樣的百分比可以看畫到哪，並產生續畫檔 -->
+                <div id="progress-row" class="hidden mt-3 flex items-center gap-3">
+                    <input type="range" id="progress-slider" min="0" max="1000" value="1000" class="flex-1 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                    <span id="progress-text" class="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">進度 100.0%</span>
+                    <button id="btn-resume" data-i18n="btnResume" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-orange-500 hover:bg-orange-400 text-white whitespace-nowrap">從這裡產生續畫檔</button>
                 </div>
             </div>
 
@@ -487,6 +512,7 @@
     <script src="gordix-table.js"></script>
     <script src="gordix-workspace.js"></script>
     <script src="gordix-regions.js"></script>
+    <script src="gordix-preview.js"></script>
     <script>
         const i18n = {
             zh: {
@@ -577,6 +603,11 @@
                 modeFill: "只填滿",
                 moveTo: "移到圖層：",
                 newLayer: "＋ 新圖層",
+                progressIdle: "進度 {p}",
+                progressText: "進度 {p}　第 {k} / {n} 筆",
+                btnResume: "從這裡產生續畫檔",
+                resumeTip: "機器面板的進度是行數百分比：拉到面板上的百分比，下載續畫檔放進 SD 卡。會從那一筆的開頭重畫。",
+                no3d: "3D 預覽需要網路載入 Three.js",
                 penzDiamWarn: "⚠ 筆桿直徑還是 0：筆的 Y 方向補償不會套用，畫的位置可能偏移。請在上方「筆桿直徑」填入實際數值。",
                 advancedOff: "進階",
                 advancedOn: "進階 ✓",
@@ -684,6 +715,11 @@
                 modeFill: "Fill only",
                 moveTo: "Move to layer:",
                 newLayer: "+ New layer",
+                progressIdle: "Progress {p}",
+                progressText: "{p} · stroke {k} / {n}",
+                btnResume: "Resume file from here",
+                resumeTip: "The machine panel shows progress by line count: set the same percentage, then put the resume file on the SD card. The stroke in progress is redrawn from its start.",
+                no3d: "3D preview needs an internet connection to load Three.js",
                 penzDiamWarn: "⚠ Pen body diameter is still 0: the pen's Y-offset compensation is not applied and the drawing may be shifted. Enter the real value in Pen Body Dia. above.",
                 advancedOff: "Advanced",
                 advancedOn: "Advanced ✓",
@@ -784,6 +820,8 @@
             document.querySelectorAll('[data-i18n]').forEach(el => { el.innerText = data[el.dataset.i18n]; });
             renderLayerPanel();
             closeRegionMenu();
+            document.getElementById('btn-resume').title = data.resumeTip;
+            updateProgress();
             renderPenPanel();
             renderAdvancedState();
             document.getElementById('btn-obj-board').innerText = data.btnObjBoard;
@@ -845,6 +883,10 @@
         const layerList = document.getElementById('layer-list');
         const regionMenu = document.getElementById('region-menu');
         const regionHighlight = document.getElementById('region-highlight');
+        const progressRow = document.getElementById('progress-row');
+        const progressSlider = document.getElementById('progress-slider');
+        const progressText = document.getElementById('progress-text');
+        const view3dEl = document.getElementById('view3d');
         
         const thresholdSlider = document.getElementById('threshold-slider');
         const thresholdValText = document.getElementById('threshold-val-text');
@@ -898,6 +940,10 @@
         let regionOverrides = []; // 手動指定圖層：{x, y, tol（預覽畫布像素）, layerId}；重新分析後依位置找回同一塊
         let menuRegion = null;    // 區域選單開著時點到的區域與位置
         let layerSeq = 1;         // 新增圖層的編號
+        let gcodeView = null;     // G-code 預覽（GordixPreview.parse 的結果，y 已換成筆尖位置）；路徑或位置改了就作廢
+        let gcodeTimer = 0;
+        let gcodeMarker = null;   // 2D 上的續畫起點
+        let view3dOn = false, gcode3d = null;
         const AUTO_LAYERS = ['line', 'blob'];
         const LAYER_COLORS = ['#10b981', '#8b5cf6', '#f43f5e', '#0ea5e9', '#f59e0b', '#64748b'];
         const FILL_MODES = ['outline_fill', 'fill'];
@@ -1015,6 +1061,7 @@
         const wsStatic = document.getElementById('ws-static');
         const wsDesign = document.getElementById('ws-design');
         const wsChrome = document.getElementById('ws-chrome');
+        const wsGcode = document.getElementById('ws-gcode');
         const wsWarning = document.getElementById('ws-warning');
         const designInner = document.getElementById('design-inner');
         const designImage = document.getElementById('design-image');
@@ -1162,6 +1209,7 @@
                 const hsz = 10 * u;
                 m.push(`<rect id="design-handle" x="${b.right - hsz / 2}" y="${-b.bottom - hsz / 2}" width="${hsz}" height="${hsz}" fill="#ffffff" stroke="${color}" stroke-width="2" ${nss} style="cursor: nwse-resize; pointer-events: all"/>`);
             }
+            if (gcodeMarker) m.push(`<circle cx="${gcodeMarker.x}" cy="${-gcodeMarker.y}" r="${7 * u}" fill="none" stroke="#dc2626" stroke-width="2.5" ${nss}/>`);
             wsChrome.innerHTML = m.join('');
             wsChrome.style.pointerEvents = 'none';
 
@@ -1259,7 +1307,7 @@
             updateDesignTransform();
             renderWorkspace();
         }));
-        function moveDesignTo(x, y) { design.x = x; design.y = y; updateDesignTransform(); renderWorkspace(); }
+        function moveDesignTo(x, y) { design.x = x; design.y = y; updateDesignTransform(); renderWorkspace(); scheduleGcodeView(); }
         document.getElementById('btn-obj-board').onclick = () => { const c = boardCenter(); moveDesignTo(Math.round(c.x * 10) / 10, Math.round(c.y * 10) / 10); };
         document.getElementById('btn-obj-origin').onclick = () => moveDesignTo(0, 0);
         document.getElementById('btn-fit-view').onclick = fitView;
@@ -1667,6 +1715,7 @@
             drawLayers = [];
             regionOverrides = [];
             closeRegionMenu();
+            progressSlider.value = 1000;
             selectedContourIndices = new Set(); // 載入新檔案時重置選擇紀錄
             originalPixelData = null;
             
@@ -2641,6 +2690,7 @@
                 }
             });
             hatchGroup.innerHTML = hatchHtml;
+            scheduleGcodeView();
 
             // 渲染帶互動事件的向量輪廓圖案，所有輪廓皆保持實線（#10b981）以確保外框繪製
             contourGroup.innerHTML = finalContours.map((p, idx) => {
@@ -2826,6 +2876,94 @@
             return svgStr;
         }
 
+        // ===== G-code 預覽：進度滑桿、2D 疊路徑、3D、續畫檔 =====
+        const hasOutput = () => finalContours.length > 0 || finalLines.length > 0 || finalFillLines.length > 0;
+        const gcodeViewActive = () => hasOutput() && (view3dOn || progressSlider.value < 1000);
+
+        // 路徑或位置改了：預覽作廢；有在看的話稍後重算（拖曳中不會每一步都重算）
+        function scheduleGcodeView() {
+            gcodeView = null;
+            clearTimeout(gcodeTimer);
+            if (gcodeViewActive()) gcodeTimer = setTimeout(refreshGcodeView, 150);
+            else updateProgress();
+        }
+
+        function refreshGcodeView() {
+            clearTimeout(gcodeTimer);
+            gcodeView = null;
+            if (gcodeViewActive()) {
+                const yOff = penYOffset();
+                gcodeView = GordixPreview.parse(generateGcode());
+                gcodeView.moves.forEach(m => { m.y -= yOff; });   // G-code 是機器中心的位置，預覽畫筆尖實際畫到的位置
+                if (view3dOn) gcode3d.setMoves(gcodeView, outlines3d());
+            }
+            updateProgress();
+        }
+
+        // 依滑桿顯示進度文字、2D 已畫 / 未畫 / 空跑路徑與續畫起點、3D 畫到哪
+        function updateProgress() {
+            const d = i18n[currentLang], frac = progressSlider.value / 1000, pct = (frac * 100).toFixed(1) + '%';
+            const a = gcodeView && GordixPreview.at(gcodeView, frac);
+            progressRow.classList.toggle('hidden', !hasOutput());
+            progressText.innerText = a
+                ? d.progressText.replace('{p}', pct).replace('{k}', a.k + 1).replace('{n}', gcodeView.starts.length)
+                : d.progressIdle.replace('{p}', pct);
+            const show2d = !!a && !view3dOn && progressSlider.value < 1000;
+            const nss = 'vector-effect="non-scaling-stroke"';
+            const s = show2d ? GordixPreview.svg2d(gcodeView, a.upto) : null;
+            wsGcode.innerHTML = s ? `<path data-k="todo" d="${s.todo}" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.7" ${nss}/>` +
+                `<path data-k="travel" d="${s.travel}" fill="none" stroke="#f97316" stroke-width="1" stroke-dasharray="4 3" opacity="0.7" ${nss}/>` +
+                `<path data-k="done" d="${s.done}" fill="none" stroke="#2563eb" stroke-width="2" ${nss}/>` : '';
+            wsGcode.style.display = show2d ? '' : 'none';
+            wsDesign.classList.toggle('gcode-dim', show2d);
+            const marker = show2d && gcodeView.starts.length ? gcodeView.moves[gcodeView.starts[a.k]] : null;
+            if (marker !== gcodeMarker) { gcodeMarker = marker; renderWorkspace(); }
+            if (a && view3dOn) gcode3d.setProgress(a.upto);
+        }
+
+        // 3D 參考框：加工範圍與板材
+        function outlines3d() {
+            const r = GordixTable.workRange(tables[tableId]);
+            const out = [[{ x: -r.x, y: -r.y }, { x: r.x, y: -r.y }, { x: r.x, y: r.y }, { x: -r.x, y: r.y }]];
+            const poly = board.on ? boardPolygon() : null;
+            if (poly) out.push(poly);
+            return out;
+        }
+
+        function setView3d(on) {
+            if (on && typeof THREE === 'undefined') { alert(i18n[currentLang].no3d); return; }
+            view3dOn = on;
+            workspace.classList.toggle('hidden', on);
+            view3dEl.classList.toggle('hidden', !on);
+            document.getElementById('btn-fit-view').classList.toggle('hidden', on);
+            closeRegionMenu();
+            const active = 'px-3 py-1 rounded text-[10px] font-bold transition-all bg-slate-700 text-white';
+            const idle = 'px-3 py-1 rounded text-[10px] font-bold transition-all text-slate-500 dark:text-slate-400';
+            document.getElementById('view-2d').className = on ? idle : active;
+            document.getElementById('view-3d').className = on ? active : idle;
+            if (on && !gcode3d) gcode3d = GordixPreview.View3D(view3dEl);
+            if (on) gcode3d.resize();
+            else applyView();
+            refreshGcodeView();
+        }
+        document.getElementById('view-2d').onclick = () => setView3d(false);
+        document.getElementById('view-3d').onclick = () => setView3d(true);
+
+        progressSlider.addEventListener('input', () => {
+            if (gcodeViewActive() && !gcodeView) refreshGcodeView();
+            else updateProgress();
+        });
+
+        // 續畫檔：用目前設定重新產生的 G-code（與下載的一致），短英文檔名（機器讀不到長的中文檔名）
+        document.getElementById('btn-resume').onclick = () => {
+            const frac = progressSlider.value / 1000;
+            const r = GordixPreview.resume(GordixPreview.parse(generateGcode()), frac);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([r.text], { type: 'text/plain' }));
+            a.download = `resume_${Math.round(frac * 100)}.gcode`;
+            a.click();
+        };
+
         downloadBtn.onclick = () => {
             if (!finalContours.length && !finalFillLines.length && !finalLines.length) return;
             const isGcode = outputMode === "gcode";
@@ -2839,6 +2977,7 @@
 
         const resizeObserver = new ResizeObserver(() => {
             fitView();
+            if (view3dOn) gcode3d.resize();
         });
         resizeObserver.observe(container);
 
@@ -2855,6 +2994,7 @@
 
         initTheme();
         updateDualSlider();
+        setView3d(false);
         updateUI();
         toggleGrayscalePowerUI();
         updateDownloadFileName();
