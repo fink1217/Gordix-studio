@@ -263,7 +263,12 @@
                 <!-- 【中央 3D 預覽面板】 -->
                 <div class="lg:col-span-6 order-1 lg:order-2">
                     <div id="preview-container" class="shadow-2xl ring-1 ring-gray-700 select-none">
-                        <div class="absolute top-3 right-3 z-10">
+                        <div class="absolute top-3 right-3 z-10 flex items-center gap-2">
+                            <!-- 2D 正上方俯視 / 3D 自由旋轉 -->
+                            <div class="flex items-center bg-black/80 backdrop-blur-md rounded-full p-0.5 border border-white/10 shadow-md">
+                                <button id="view-2d" class="px-2.5 py-0.5 rounded-full text-[10px] font-black text-gray-400 hover:text-white">2D</button>
+                                <button id="view-3d" class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white">3D</button>
+                            </div>
                             <div class="bg-black/80 backdrop-blur-md text-emerald-400 px-3 py-1 rounded-full text-[9px] font-black border border-emerald-500/30 shadow-md" id="txt-preview-hint">
                                 3D REALTIME VIEW
                             </div>
@@ -496,6 +501,7 @@
     let currentLang = 'zh';
     let lastTimeSec = 0, lastDistance = 0;
     let scene, camera, renderer, gcodeGroup, grid, cameraTarget;
+    let view2d = false;   // 2D = 正上方俯視：路徑壓平、左鍵拖曳平移
     let originalGcode = "";
     let originalFileName = "output";
 
@@ -641,7 +647,7 @@
             const deltaX = x - previousMouse.x;
             const deltaY = y - previousMouse.y;
             
-            if (buttons === 1) {
+            if (buttons === 1 && !view2d) {
                 const offset = new THREE.Vector3().subVectors(camera.position, cameraTarget);
                 const radius = offset.length();
                 let phi = Math.atan2(offset.y, offset.x) - deltaX * 0.005;
@@ -651,7 +657,7 @@
                 camera.position.x = cameraTarget.x + radius * Math.sin(theta) * Math.cos(phi);
                 camera.position.y = cameraTarget.y + radius * Math.sin(theta) * Math.sin(phi);
                 camera.position.z = cameraTarget.z + radius * Math.cos(theta);
-            } else if (buttons === 2) {
+            } else if (buttons === 2 || buttons === 1) {   // 右鍵平移；2D 時左鍵也是平移
                 const factor = 0.0015 * camera.position.distanceTo(cameraTarget);
                 const localRight = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
                 const localUp = new THREE.Vector3(0, 1, 0).applyQuaternion(camera.quaternion);
@@ -754,6 +760,28 @@
     }
 
     function animate() { requestAnimationFrame(animate); renderer.render(scene, camera); }
+
+    // 鏡頭擺位：3D 在目標斜上方（Z 朝上）；2D 在目標正上方俯視（畫面上方 = +Y）
+    function placeCamera(dist) {
+        camera.up.set(0, view2d ? 1 : 0, view2d ? 0 : 1);
+        const dir = view2d ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(1, -1, 1).normalize();
+        camera.position.copy(cameraTarget).addScaledVector(dir, dist);
+        camera.lookAt(cameraTarget);
+    }
+
+    // 2D / 3D 切換：2D 把路徑壓平（不同深度不會因透視錯開），保持目前的縮放距離
+    function setView2d(on) {
+        view2d = on;
+        if (gcodeGroup) gcodeGroup.scale.z = on ? 1e-6 : 1;
+        placeCamera(camera.position.distanceTo(cameraTarget));
+        const active = 'px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white';
+        const idle = 'px-2.5 py-0.5 rounded-full text-[10px] font-black text-gray-400 hover:text-white';
+        document.getElementById('view-2d').className = on ? active : idle;
+        document.getElementById('view-3d').className = on ? idle : active;
+        document.getElementById('txt-preview-hint').classList.toggle('hidden', on);   // 「3D REALTIME VIEW」標籤只在 3D 顯示
+    }
+    document.getElementById('view-2d').onclick = () => setView2d(true);
+    document.getElementById('view-3d').onclick = () => setView2d(false);
 
     // 格式化數字：四捨五入至指定位數並自動去除尾數不必要的 0
     function formatNum(val, maxDecimals = 4) {
@@ -2318,6 +2346,7 @@
 
         if (gcodeGroup) scene.remove(gcodeGroup);
         gcodeGroup = new THREE.Group();
+        gcodeGroup.scale.z = view2d ? 1e-6 : 1;
 
         let totalDist = 0, totalTime = 0, lastP = { x: 0, y: 0, z: 0 }, isF = true;
 
@@ -2620,9 +2649,8 @@
         document.getElementById('fileNameDisplay').innerText = file.name;
         document.getElementById('fileInfo').classList.remove('hidden');
         
-        if (cameraTarget) cameraTarget.set(0, 0, 0);
-        if (camera) camera.position.set(200, -200, 200);
-        if (camera && cameraTarget) camera.lookAt(cameraTarget);
+        // 鏡頭回到原點：3D 在 (200, -200, 200)，2D 在正上方同樣距離
+        if (camera) { cameraTarget.set(0, 0, 0); placeCamera(200 * Math.sqrt(3)); }
 
         const r = new FileReader(); 
         r.onload = ev => { 
