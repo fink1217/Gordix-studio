@@ -256,14 +256,6 @@
                         <input type="checkbox" id="enable-fill" class="w-4 h-4 accent-blue-500 rounded">
                     </div>
                     <div id="fill-settings-group" class="space-y-3 transition-opacity opacity-30 pointer-events-none">
-                        <!-- 點擊圖形提示與快速切換按鈕（只有 SVG / DXF；點陣圖改用圖層） -->
-                        <div id="fill-pick-row" class="flex items-center justify-between bg-blue-50/50 dark:bg-blue-900/20 p-2 rounded-lg border border-blue-200/50 dark:border-blue-500/20">
-                            <span id="i18n-label-fill-tip" class="text-[9px] text-blue-600 dark:text-blue-300 font-bold">💡 點選預覽圖形可個別開關填滿</span>
-                            <div class="flex gap-1">
-                                <button id="btn-select-all-fill" class="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-bold transition">全選</button>
-                                <button id="btn-deselect-all-fill" class="px-1.5 py-0.5 bg-slate-300 dark:bg-slate-700 hover:bg-slate-400 text-slate-700 dark:text-slate-200 rounded text-[9px] font-bold transition">全清</button>
-                            </div>
-                        </div>
                         <div class="grid grid-cols-2 gap-3">
                             <div>
                                 <label id="i18n-label-angle" class="block text-[10px] text-slate-500 dark:text-slate-400 mb-1 none font-bold">填滿角度</label>
@@ -511,6 +503,7 @@
 
     <script src="gordix-table.js"></script>
     <script src="gordix-workspace.js"></script>
+    <script src="gordix-import.js"></script>
     <script src="gordix-regions.js"></script>
     <script src="gordix-preview.js"></script>
     <script>
@@ -530,9 +523,6 @@
                 labelSmooth: "曲線平滑度",
                 labelResolution: "解析度 (線段長)",
                 labelFillTitle: "填滿設定 (Hatch)",
-                labelFillTip: "💡 點選預覽圖形可個別開關填滿",
-                btnSelectAll: "全選",
-                btnDeselectAll: "全清",
                 labelAngle: "填滿角度",
                 labelSpacing: "間隔 (mm)",
                 labelGrayFill: "灰階漸變填滿",
@@ -642,9 +632,6 @@
                 labelSmooth: "Path Smoothing",
                 labelResolution: "Resolution (Step)",
                 labelFillTitle: "Fill Settings (Hatch)",
-                labelFillTip: "💡 Click canvas objects to toggle fill",
-                btnSelectAll: "All",
-                btnDeselectAll: "None",
                 labelAngle: "Fill Angle",
                 labelSpacing: "Spacing (mm)",
                 labelGrayFill: "Grayscale Hatch",
@@ -790,9 +777,6 @@
             document.getElementById('i18n-label-smooth').innerText = data.labelSmooth;
             document.getElementById('i18n-label-resolution').innerText = data.labelResolution;
             document.getElementById('i18n-label-fill-title').innerText = data.labelFillTitle;
-            document.getElementById('i18n-label-fill-tip').innerText = data.labelFillTip;
-            document.getElementById('btn-select-all-fill').innerText = data.btnSelectAll;
-            document.getElementById('btn-deselect-all-fill').innerText = data.btnDeselectAll;
             document.getElementById('i18n-label-angle').innerText = data.labelAngle;
             document.getElementById('i18n-label-spacing').innerText = data.labelSpacing;
             document.getElementById('i18n-label-gray-fill').innerText = data.labelGrayFill;
@@ -931,11 +915,11 @@
         let showImage = true, showContour = true, showHatch = true;
         let isSvgSource = false; 
         let rawSvgPaths = [];    
-        let selectedContourIndices = new Set(); // 記錄選擇進行填滿的輪廓索引（SVG / DXF）
         let finalLines = [];      // 中線路徑（不閉合）
         let drawRegions = [];     // 點陣圖區域分析結果（遮罩像素座標）
         let drawLayers = [];      // 圖層，順序 = 畫的順序
-        let regionScale = 1;      // 遮罩像素 → 預覽畫布像素
+        let regionScale = 1;      // 遮罩像素 → 預覽畫布像素（向量檔直接用畫布像素，= 1）
+        let designBox = null;     // 物件外框（預覽畫布像素），分析時以全部區域定好
         let regionPenPx = 1;      // 線寬（遮罩像素），點選區域的容差用
         let regionOverrides = []; // 手動指定圖層：{x, y, tol（預覽畫布像素）, layerId}；重新分析後依位置找回同一塊
         let menuRegion = null;    // 區域選單開著時點到的區域與位置
@@ -944,7 +928,6 @@
         let gcodeTimer = 0;
         let gcodeMarker = null;   // 2D 上的續畫起點
         let view3dOn = false, gcode3d = null;
-        const AUTO_LAYERS = ['line', 'blob'];
         const LAYER_COLORS = ['#10b981', '#8b5cf6', '#f43f5e', '#0ea5e9', '#f59e0b', '#64748b'];
         const FILL_MODES = ['outline_fill', 'fill'];
         let pointerDownPos = { x: 0, y: 0 };   // 記錄點擊初始位置以過濾拖曳
@@ -1098,23 +1081,9 @@
             return currentWidthMm() / previewCanvas.width;
         }
 
-        // 輪廓、中線與填滿線的外框（預覽畫布像素座標）。
-        // 點陣圖以全部區域（含隱藏的圖層）為準：關掉某一層時其他層不會跟著移位，分次畫也對得上。
+        // 物件外框（預覽畫布像素）：分析時以全部區域（含隱藏的圖層）定好，關掉某一層時其他層不會跟著移位，分次畫也對得上
         function designBoxPx() {
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-            const up = p => { minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x); minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y); };
-            if (!isSvgSource && drawRegions.length) {
-                // bbox 是像素中心座標，像素本身往外各半格
-                drawRegions.forEach(r => {
-                    up({ x: (r.bbox[0] - 0.5) * regionScale, y: (r.bbox[1] - 0.5) * regionScale });
-                    up({ x: (r.bbox[2] + 0.5) * regionScale, y: (r.bbox[3] + 0.5) * regionScale });
-                });
-            }
-            finalContours.forEach(path => path.forEach(up));
-            finalLines.forEach(path => path.forEach(up));
-            finalFillLines.forEach(line => line.pts.forEach(up));
-            if (minX === Infinity) return { minX: 0, minY: 0, maxX: previewCanvas.width, maxY: previewCanvas.height };
-            return { minX, minY, maxX, maxY };
+            return designBox || { minX: 0, minY: 0, maxX: previewCanvas.width, maxY: previewCanvas.height };
         }
 
         // 加工物件的實際尺寸與四邊位置（機器座標 mm）
@@ -1386,28 +1355,8 @@
 
             if (mode === 'resize') recomputeFillLines();
 
-            // 點一下（沒有拖動）且開啟填滿時，切換該圖形是否填滿
-            if (isSvgSource && fillEnable.checked && pointerDownPos && mode !== 'pinch') {
-                const dist = Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y);
-                if (dist < 5) {
-                    const elem = document.elementFromPoint(e.clientX, e.clientY);
-                    const pathEl = elem ? elem.closest('path[data-index]') : null;
-                    if (pathEl) {
-                        const idx = parseInt(pathEl.dataset.index, 10);
-                        if (!isNaN(idx)) {
-                            if (selectedContourIndices.has(idx)) {
-                                selectedContourIndices.delete(idx);
-                            } else {
-                                selectedContourIndices.add(idx);
-                            }
-                            recomputeFillLines();
-                        }
-                    }
-                }
-            }
-
-            // 點陣圖：點一下（沒有拖動）區域 → 選單，選要移到哪個圖層
-            if (!isSvgSource && drawRegions.length && pointerDownPos && mode !== 'pinch' && mode !== 'resize'
+            // 點一下（沒有拖動）區域 → 選單，選要移到哪個圖層
+            if (drawRegions.length && pointerDownPos && mode !== 'pinch' && mode !== 'resize'
                 && Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) < 5) {
                 openRegionMenu(e.clientX, e.clientY);
             }
@@ -1587,16 +1536,6 @@
         try { document.body.classList.toggle('show-advanced', localStorage.getItem(ADVANCED_KEY) === '1'); } catch (e) { }
 
 
-        document.getElementById('btn-select-all-fill').onclick = () => {
-            selectedContourIndices = new Set(finalContours.map((_, i) => i));
-            recomputeFillLines();
-        };
-
-        document.getElementById('btn-deselect-all-fill').onclick = () => {
-            selectedContourIndices.clear();
-            recomputeFillLines();
-        };
-
         function updateOutputFormatUI() {
             const isGcode = outputMode === "gcode";
             const selectedClass = "flex-1 py-2 rounded text-[10px] font-bold transition-all bg-blue-600 text-white ring-2 ring-blue-400 shadow-lg";
@@ -1628,6 +1567,11 @@
             let x1 = 0, y1 = 0, x2 = 0, y2 = 0;
             let cx = 0, cy = 0, radius = 0;
             let polylinePoints = [];
+            // 每條路徑記下圖層、顏色（ACI 色號，最後換成 #rrggbb）與是否封閉（圓、旗標 70 的封閉折線、頭尾相接）
+            let layer = '0', aci = null, flags = 0, tableName = null;
+            const layerAci = {};
+            const push = pts => paths.push({ pts, layer, aci, closed: currentEntity === 'CIRCLE' || (currentEntity !== 'LINE'
+                && ((flags & 1) === 1 || Math.hypot(pts[0].x - pts[pts.length - 1].x, pts[0].y - pts[pts.length - 1].y) < 1e-9)) });
             
             while (i < lines.length) {
                 const line = lines[i];
@@ -1638,10 +1582,10 @@
                 
                 if (code === 0) {
                     if (currentEntity === 'LINE') {
-                        paths.push([{x: x1, y: y1}, {x: x2, y: y2}]);
+                        push([{x: x1, y: y1}, {x: x2, y: y2}]);
                     } else if (currentEntity === 'LWPOLYLINE' || currentEntity === 'POLYLINE') {
                         if (polylinePoints.length > 1) {
-                            paths.push(polylinePoints);
+                            push(polylinePoints);
                         }
                     } else if (currentEntity === 'CIRCLE') {
                         const circlePts = [];
@@ -1653,14 +1597,23 @@
                                 y: cy + radius * Math.sin(angle)
                             });
                         }
-                        paths.push(circlePts);
+                        push(circlePts);
                     }
                     
                     currentEntity = val.toUpperCase();
                     polylinePoints = [];
                     x1 = 0; y1 = 0; x2 = 0; y2 = 0;
                     cx = 0; cy = 0; radius = 0;
+                    layer = '0'; aci = null; flags = 0;
                 } else {
+                    if (currentEntity === 'LAYER') {
+                        if (code === 2) tableName = val;
+                        if (code === 62) layerAci[tableName] = parseInt(val);
+                    } else {
+                        if (code === 8) layer = val;
+                        if (code === 62) aci = parseInt(val);
+                        if (code === 70) flags = parseInt(val);
+                    }
                     if (currentEntity === 'LINE') {
                         if (code === 10) x1 = parseFloat(val);
                         if (code === 20) y1 = parseFloat(val);
@@ -1684,9 +1637,9 @@
             }
             
             if (currentEntity === 'LINE') {
-                paths.push([{x: x1, y: y1}, {x: x2, y: y2}]);
+                push([{x: x1, y: y1}, {x: x2, y: y2}]);
             } else if (currentEntity === 'LWPOLYLINE' && polylinePoints.length > 1) {
-                paths.push(polylinePoints);
+                push(polylinePoints);
             } else if (currentEntity === 'CIRCLE') {
                 const circlePts = [];
                 const segments = 64;
@@ -1694,10 +1647,12 @@
                     const angle = (s / segments) * Math.PI * 2;
                     circlePts.push({ x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) });
                 }
-                paths.push(circlePts);
+                push(circlePts);
             }
             
-            return paths;
+            // 色號 256（ByLayer）或沒設定時用圖層的顏色
+            const ACI = { 1: '#ff0000', 2: '#ffff00', 3: '#00ff00', 4: '#00ffff', 5: '#0000ff', 6: '#ff00ff', 7: '#ffffff', 8: '#808080', 9: '#c0c0c0' };
+            return paths.map(({ aci, ...rest }) => ({ ...rest, color: ACI[Math.abs(aci === null || aci === 256 ? layerAci[rest.layer] : aci)] || null }));
         }
 
         fileInput.addEventListener('change', (e) => {
@@ -1713,10 +1668,10 @@
             finalLines = [];
             drawRegions = [];
             drawLayers = [];
+            designBox = null;
             regionOverrides = [];
             closeRegionMenu();
             progressSlider.value = 1000;
-            selectedContourIndices = new Set(); // 載入新檔案時重置選擇紀錄
             originalPixelData = null;
             
             document.getElementById('coord-range').innerText = currentLang === 'zh' ? '處理中...' : 'Processing...';
@@ -1754,10 +1709,10 @@
                     if (insunits === 6) unitScale = 1000; 
                     
                     const rawPaths = await extractPointsFromDxf(dxfText);
-                    rawSvgPaths = rawPaths.map(pts => pts.map(p => ({ x: p.x * unitScale, y: p.y * unitScale })));
+                    rawSvgPaths = rawPaths.map(sp => ({ ...sp, pts: sp.pts.map(p => ({ x: p.x * unitScale, y: p.y * unitScale })) }));
                     
                     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-                    rawSvgPaths.forEach(pts => pts.forEach(p => {
+                    rawSvgPaths.forEach(({ pts }) => pts.forEach(p => {
                         minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
                         minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
                     }));
@@ -1777,7 +1732,7 @@
                     pCtx.strokeStyle = isDarkTheme ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)";
                     pCtx.lineWidth = 1;
                     
-                    rawSvgPaths.forEach(pts => {
+                    rawSvgPaths.forEach(({ pts }) => {
                         if (pts.length < 2) return;
                         pCtx.beginPath();
                         pCtx.moveTo((pts[0].x - minX) * internalScale, (pts[0].y - minY) * internalScale);
@@ -1806,7 +1761,7 @@
                     const svgEl = doc.querySelector("svg");
                     
                     let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-                    rawSvgPaths.forEach(pts => pts.forEach(p => {
+                    rawSvgPaths.forEach(({ pts }) => pts.forEach(p => {
                         minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
                         minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
                     }));
@@ -1841,7 +1796,7 @@
                     pCtx.strokeStyle = isDarkTheme ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)";
                     pCtx.lineWidth = 1;
                     
-                    rawSvgPaths.forEach(pts => {
+                    rawSvgPaths.forEach(({ pts }) => {
                         if (pts.length < 2) return;
                         pCtx.beginPath();
                         pCtx.moveTo((pts[0].x - minX) * internalScale, (pts[0].y - minY) * internalScale);
@@ -2058,6 +2013,7 @@
                 }
 
                 if (!d.trim()) return;
+                const layer = GordixImport.svgLayer(el), color = GordixImport.svgColor(el);
 
                 // 取得 CTM 轉換矩陣以套用所有群組 (<g>) 的 transform (平移、旋轉、縮放)
                 let ctm = null;
@@ -2104,7 +2060,9 @@
                         }
 
                         if (pts.length > 1) {
-                            pathsPoints.push(pts);
+                            // 有 Z 或頭尾接在一起才算封閉；開放路徑照原樣畫，不再強制封閉
+                            const closed = /z/i.test(subD) || Math.hypot(pts[0].x - endX, pts[0].y - endY) < 1e-3;
+                            pathsPoints.push({ pts, layer, color, closed });
                         }
                     } catch(e) {} finally {
                         if (tempPath.parentNode) {
@@ -2134,7 +2092,7 @@
         }
 
         fillEnable.addEventListener('change', () => {
-            if (!isSvgSource) setFillModes(fillEnable.checked);
+            setFillModes(fillEnable.checked);
             applyFillUi();
             if (originalImage) {
                 triggerLiveProcess();
@@ -2165,21 +2123,6 @@
             pCtx.putImageData(imageData, 0, 0);
         }
 
-        function simplifyPath(pts, epsilon) {
-            if (pts.length <= 2) return pts;
-            let dmax = 0, idx = 0;
-            for (let i = 1; i < pts.length - 1; i++) {
-                let d = distToSegment(pts[i], pts[0], pts[pts.length - 1]);
-                if (d > dmax) { idx = i; dmax = d; }
-            }
-            if (dmax > epsilon * epsilon) {
-                let r1 = simplifyPath(pts.slice(0, idx + 1), epsilon);
-                let r2 = simplifyPath(pts.slice(idx), epsilon);
-                return r1.slice(0, -1).concat(r2);
-            }
-            return [pts[0], pts[pts.length - 1]];
-        }
-
         function distToSegment(p, p1, p2) {
             let x = p1.x, y = p1.y, dx = p2.x - x, dy = p2.y - y;
             if (dx !== 0 || dy !== 0) {
@@ -2188,22 +2131,6 @@
                 else if (t > 0) { x += dx * t; y += dy * t; }
             }
             return Math.pow(p.x - x, 2) + Math.pow(p.y - y, 2);
-        }
-
-        function smoothPathChaikin(pts, iters) {
-            if (iters === 0 || pts.length < 3) return pts;
-            let cur = pts;
-            for (let it = 0; it < iters; it++) {
-                const next = [cur[0]];
-                for (let i = 0; i < cur.length - 1; i++) {
-                    const p1 = cur[i], p2 = cur[i + 1];
-                    next.push({ x: 0.75 * p1.x + 0.25 * p2.x, y: 0.75 * p1.y + 0.25 * p2.y });
-                    next.push({ x: 0.25 * p1.x + 0.75 * p2.x, y: 0.25 * p1.y + 0.75 * p2.y });
-                }
-                next.push(cur[cur.length - 1]);
-                cur = next;
-            }
-            return cur;
         }
 
         function resamplePath(pts, segPx) {
@@ -2230,61 +2157,6 @@
             return res;
         }
 
-        function traceContour(startX, startY, visited, isBlack, w, h) {
-            const path = [];
-            let cx = startX, cy = startY, d = 7;
-            const dirs = [[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1]];
-            while (true) {
-                visited[cy * w + cx] = 1;
-                path.push({x: cx, y: cy});
-                let found = false;
-                for (let i = 0; i < 8; i++) {
-                    let nd = (d + i) % 8;
-                    let nx = cx + dirs[nd][0], ny = cy + dirs[nd][1];
-                    if (nx >= 0 && nx < w && ny >= 0 && ny < h && isBlack(nx, ny)) {
-                        cx = nx; cy = ny; d = (nd + 5) % 8; found = true; break;
-                    }
-                }
-                if ((cx === startX && cy === startY && path.length > 2) || !found || path.length > w * h) break;
-            }
-            return path;
-        }
-
-        function generateFillLines(paths, deg, spacingPx) {
-            const lines = [];
-            if (!paths.length) return lines;
-            
-            if (isNaN(spacingPx) || spacingPx <= 1.0) {
-                return lines;
-            }
-
-            const rad = (deg * Math.PI) / 180;
-            const cos = Math.cos(rad), sin = Math.sin(rad);
-            const rotated = paths.map(p => p.map(pt => ({ x: pt.x * cos + pt.y * sin, y: -pt.x * sin + pt.y * cos })));
-            let minY = Infinity, maxY = -Infinity;
-            rotated.forEach(rp => rp.forEach(pt => { minY = Math.min(minY, pt.y); maxY = Math.max(maxY, pt.y); }));
-            
-            const lineCountEstimate = (maxY - minY) / spacingPx;
-            if (lineCountEstimate > 3000) {
-                return lines; 
-            }
-
-            for (let y = minY + spacingPx; y < maxY; y += spacingPx) {
-                let inters = [];
-                rotated.forEach(rp => {
-                    for (let i = 0; i < rp.length; i++) {
-                        let p1 = rp[i], p2 = rp[(i+1)%rp.length];
-                        if ((p1.y <= y && p2.y > y) || (p2.y <= y && p1.y > y)) inters.push(p1.x + (y - p1.y) * (p2.x - p1.x) / (p2.y - p1.y));
-                    }
-                });
-                inters.sort((a,b)=>a-b);
-                for (let i = 0; i < inters.length; i += 2) {
-                    if (i+1 < inters.length) lines.push([{ x: inters[i] * cos - y * sin, y: inters[i] * sin + y * cos }, { x: inters[i+1] * cos - y * sin, y: inters[i+1] * sin + y * cos }]);
-                }
-            }
-            return lines;
-        }
-
         async function processImage() {
             document.getElementById('loading-spinner').classList.remove('hidden');
             await new Promise(r => setTimeout(r, 50));
@@ -2296,7 +2168,7 @@
 
             if (isSvgSource) {
                 let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-                rawSvgPaths.forEach(pts => pts.forEach(p => {
+                rawSvgPaths.forEach(({ pts }) => pts.forEach(p => {
                     minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
                     minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
                 }));
@@ -2318,7 +2190,7 @@
                 pCtx.strokeStyle = isDarkTheme ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)";
                 pCtx.lineWidth = 1;
                 
-                rawSvgPaths.forEach(pts => {
+                rawSvgPaths.forEach(({ pts }) => {
                     if (pts.length < 2) return;
                     pCtx.beginPath();
                     pCtx.moveTo((pts[0].x - minX) * internalScale, (pts[0].y - minY) * internalScale);
@@ -2328,10 +2200,8 @@
                     pCtx.stroke();
                 });
 
-                finalContours = rawSvgPaths.map(pts => {
-                    let path = pts.map(p => ({ x: (p.x - minX) * internalScale, y: (p.y - minY) * internalScale }));
-                    return resamplePath(path, segPx);
-                });
+                analyzeVector(rawSvgPaths.map(sp => ({ ...sp,
+                    pts: resamplePath(sp.pts.map(p => ({ x: (p.x - minX) * internalScale, y: (p.y - minY) * internalScale })), segPx) })), targetW_mm);
             } else {
                 analyzeBitmap(targetW_mm);
             }
@@ -2339,21 +2209,6 @@
             designImage.setAttribute('href', previewCanvas.toDataURL());
             designImage.setAttribute('width', previewCanvas.width);
             designImage.setAttribute('height', previewCanvas.height);
-
-            document.getElementById('fill-pick-row').classList.toggle('hidden', !isSvgSource);
-
-            // SVG / DXF：保留使用者先前的點選選擇，如無選擇則預設全選
-            if (!isSvgSource) {
-                selectedContourIndices = new Set();
-            } else if (!selectedContourIndices || selectedContourIndices.size === 0) {
-                selectedContourIndices = new Set(finalContours.map((_, i) => i));
-            } else {
-                const validIndices = new Set();
-                selectedContourIndices.forEach(idx => {
-                    if (idx < finalContours.length) validIndices.add(idx);
-                });
-                selectedContourIndices = validIndices.size > 0 ? validIndices : new Set(finalContours.map((_, i) => i));
-            }
 
             recomputeFillLines();
             document.getElementById('loading-spinner').classList.add('hidden');
@@ -2382,9 +2237,132 @@
             drawRegions = GordixRegions.analyze(mask, { penPx: lineMm * w / targetW_mm }).filter(r => perimeter(r) > minLen);
             regionScale = srcW / w;
             regionPenPx = lineMm * w / targetW_mm;
-            if (!drawLayers.length) drawLayers = defaultLayers();
-            // 先自動分組，再套用手動指定（依位置找回同一塊；指定的圖層被刪了就不套）
-            drawRegions.forEach(r => { r.layerId = r.kind; });
+            drawRegions.forEach(r => { r.auto = r.kind; r.group = ''; });
+            // 物件外框以全部區域為準（bbox 是像素中心座標，像素本身往外各半格）
+            designBox = boxOf(drawRegions.map(r => [{ x: (r.bbox[0] - 0.5) * regionScale, y: (r.bbox[1] - 0.5) * regionScale },
+                                                    { x: (r.bbox[2] + 0.5) * regionScale, y: (r.bbox[3] + 0.5) * regionScale }]));
+            assignLayers([{ id: 'line', group: '', kind: 'line' }, { id: 'blob', group: '', kind: 'blob' }]);
+        }
+
+        // SVG / DXF：外框保留原本的向量點（精度與切割尺寸不變），只量封閉圖形有多粗：比 1.5 個線寬細的改畫一條中線。
+        // 開放路徑照原樣畫、不強制封閉。依圖層名或顏色（與 CNC 工具相同規則）× 細線 / 色塊自動分組。
+        // paths：[{ pts（預覽畫布像素）, layer, color, closed }]
+        function analyzeVector(paths, targetW_mm) {
+            const lineMm = Math.max(0.1, parseFloat(lineWidthInput.value) || 1.0);
+            const pen = lineMm * previewCanvas.width / targetW_mm;
+            const mode = GordixImport.autoGroupMode(paths);
+            const groups = GordixImport.groupPaths(paths, mode);
+            const specs = [];
+            drawRegions = [];
+            groups.forEach((g, gi) => {
+                const prefix = groups.length > 1 ? `g${gi}-` : '';
+                const group = groups.length > 1 ? g.key : '';
+                const color = mode === 'color' ? visibleColor(g.key) : null;
+                const regions = g.paths.filter(q => !q.closed).map(q => ({ kind: 'line', center: [q.pts], outline: [], core: [], bbox: bboxOf([q.pts]) }))
+                    .concat(vectorShapes(g.paths.filter(q => q.closed).map(q => q.pts)).map(shape => vectorRegion(shape, pen)));
+                ['line', 'blob'].forEach(kind => {
+                    if (regions.some(r => r.kind === kind)) specs.push({ id: prefix + kind, group, kind, color });
+                });
+                regions.forEach(r => drawRegions.push(Object.assign(r, { id: drawRegions.length, auto: prefix + r.kind, group })));
+            });
+            regionScale = 1;
+            regionPenPx = pen;
+            designBox = boxOf(paths.map(q => q.pts));
+            assignLayers(specs);
+        }
+
+        // 一組路徑的外框 {minX, minY, maxX, maxY}；沒有點時回傳 null
+        function boxOf(paths) {
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            paths.forEach(p => p.forEach(q => { minX = Math.min(minX, q.x); minY = Math.min(minY, q.y); maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y); }));
+            return minX === Infinity ? null : { minX, minY, maxX, maxY };
+        }
+
+        function bboxOf(paths) {
+            const b = boxOf(paths);
+            return [b.minX, b.minY, b.maxX, b.maxY];
+        }
+
+        const polyArea = p => p.reduce((s, q, i) => s + q.x * p[(i + 1) % p.length].y - p[(i + 1) % p.length].x * q.y, 0) / 2;
+        const polyLength = (p, closed) => p.reduce((s, q, i) => i + 1 < p.length || closed ? s + Math.hypot(p[(i + 1) % p.length].x - q.x, p[(i + 1) % p.length].y - q.y) : s, 0);
+
+        // 檔案裡的顏色當圖層顏色；太暗（黑線在深色預覽看不到）或太淡的改用預設色盤
+        function visibleColor(hex) {
+            const c = /^#[0-9a-f]{6}$/i.test(hex || '') ? [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255) : null;
+            return c && Math.max(...c) >= 0.25 && Math.min(...c) <= 0.85 ? hex.toLowerCase() : null;
+        }
+
+        // 封閉路徑依包含關係組成圖形（同一組內的奇偶規則）：被奇數層包住的是洞，跟著直接包住它的那個外框
+        function vectorShapes(closed) {
+            const box = closed.map(p => boxOf([p]));
+            const within = (i, j) => i !== j && box[i].minX >= box[j].minX && box[i].maxX <= box[j].maxX
+                && box[i].minY >= box[j].minY && box[i].maxY <= box[j].maxY && insidePolygon(closed[i][0], closed[j]);
+            const parents = closed.map((_, i) => closed.map((_, j) => j).filter(j => within(i, j)));
+            const outerOf = i => parents[i].length % 2 ? parents[i].find(j => parents[j].length === parents[i].length - 1) : undefined;
+            const shapes = new Map();
+            closed.forEach((p, i) => { if (outerOf(i) === undefined) shapes.set(i, [p]); });
+            closed.forEach((p, i) => { if (outerOf(i) !== undefined) shapes.get(outerOf(i)).push(p); });
+            return [...shapes.values()];
+        }
+
+        // 一個封閉圖形 → 區域。2×面積÷周長（不會大於最大內切寬度）已經 ≥ 1.5 線寬的一定是色塊；
+        // 其餘光柵化（解析度 = 線寬 / 4）量最大內切寬度，細的取中線。中線太短（小圓點）還是畫外框，免得點不見。
+        function vectorRegion(shape, pen) {
+            const r = { outline: shape, core: shape, bbox: bboxOf(shape) };
+            const area = shape.reduce((s, p, i) => s + (i ? -1 : 1) * Math.abs(polyArea(p)), 0);
+            const perim = shape.reduce((s, p) => s + polyLength(p, true), 0);
+            const raster = 2 * area / perim < 1.5 * pen ? rasterize(shape, pen) : null;
+            const center = raster && inscribedWidth(raster) < 1.5 * pen ? centerOf(raster, pen) : null;
+            if (center && center.reduce((s, p) => s + polyLength(p, false), 0) >= pen) return Object.assign(r, { kind: 'line', center });
+            // 色塊的中線只有放進「中線」圖層才用得到，用到才算（大圖形光柵化比較慢）
+            let lazy = null;
+            Object.defineProperty(r, 'center', { get: () => lazy || (lazy = centerOf(raster || rasterize(shape, pen), pen)), enumerable: true });
+            return Object.assign(r, { kind: 'blob' });
+        }
+
+        // 圖形（外框＋洞，奇偶規則）光柵化：解析度 = 線寬 / 4，像素數有上限；遮罩像素中心 i 對應畫布 (i + 0.5) / s + o
+        function rasterize(shape, pen) {
+            const b = boxOf(shape), pad = 2, cap = 4e6;
+            const s = Math.min(4 / pen, Math.sqrt(cap / Math.max(1e-9, (b.maxX - b.minX) * (b.maxY - b.minY))));
+            const w = Math.ceil((b.maxX - b.minX) * s) + 2 * pad, h = Math.ceil((b.maxY - b.minY) * s) + 2 * pad;
+            const ox = b.minX - pad / s, oy = b.minY - pad / s;
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const g = c.getContext('2d', { willReadFrequently: true });
+            g.setTransform(s, 0, 0, s, -ox * s, -oy * s);
+            g.beginPath();
+            shape.forEach(p => { g.moveTo(p[0].x, p[0].y); p.forEach(q => g.lineTo(q.x, q.y)); g.closePath(); });
+            g.fill('evenodd');
+            const px = g.getImageData(0, 0, w, h).data;
+            const m = { w, h, data: new Uint8Array(w * h) };
+            for (let i = 0; i < w * h; i++) m.data[i] = px[i * 4 + 3] > 127 ? 1 : 0;
+            return { m, s, ox, oy };
+        }
+
+        // 最大內切寬度（畫布像素）：最深的像素中心到外面最近像素中心的距離 ≈ 半寬 + 半格
+        function inscribedWidth({ m, s }) {
+            const d = GordixRegions.edt(m, 0);
+            let max = 0;
+            for (let i = 0; i < d.length; i++) if (m.data[i] && d[i] > max) max = d[i];
+            return (2 * Math.sqrt(max) - 1) / s;
+        }
+
+        function centerOf({ m, s, ox, oy }, pen) {
+            return GordixRegions.centerlines(m, pen * s).map(p => p.map(q => ({ x: (q.x + 0.5) / s + ox, y: (q.y + 0.5) / s + oy })));
+        }
+
+        // ===== 圖層 =====
+        // 補上缺的自動圖層（已有的保留使用者的設定，換檔才清空）：細線 → 中線；色塊 → 只外框（開了填滿就外框＋填滿）。
+        // 每塊先回自動分組，再套用手動指定（依位置找回同一塊；指定的圖層被刪了就不套）。
+        function assignLayers(specs) {
+            specs.forEach(sp => {
+                if (drawLayers.some(l => l.id === sp.id)) return;
+                const n = drawLayers.length;
+                drawLayers.push({ id: sp.id, auto: true, group: sp.group, kind: sp.kind, name: '', visible: true,
+                    mode: sp.kind === 'line' ? 'center' : fillEnable.checked ? 'outline_fill' : 'outline',
+                    color: sp.color || LAYER_COLORS[n % LAYER_COLORS.length] });
+            });
+            drawRegions.forEach(r => { r.layerId = r.auto; });
             regionOverrides.forEach(o => {
                 const r = regionAt(o.x, o.y, o.tol);
                 if (r && drawLayers.some(l => l.id === o.layerId)) r.layerId = o.layerId;
@@ -2392,17 +2370,8 @@
             closeRegionMenu();
         }
 
-        // ===== 圖層 =====
-        // 自動分組：細線 → 中線；色塊 → 只外框（開了填滿就外框＋填滿）。圖層設定在重新分析時保留，換檔才重設。
-        function defaultLayers() {
-            return [
-                { id: 'line', name: '', mode: 'center', visible: true, color: LAYER_COLORS[0] },
-                { id: 'blob', name: '', mode: fillEnable.checked ? 'outline_fill' : 'outline', visible: true, color: LAYER_COLORS[1] }
-            ];
-        }
-
         function layerName(l) {
-            return l.name || i18n[currentLang]['layer_' + l.id] || '';
+            return l.name || (l.group ? l.group + ' · ' : '') + (i18n[currentLang]['layer_' + l.kind] || '');
         }
 
         function escAttr(v) {
@@ -2412,7 +2381,7 @@
         // 點陣圖的「填滿」勾選 ＝ 有圖層畫填滿：勾選時色塊層補上填滿，取消時每一層都拿掉填滿
         function setFillModes(on) {
             drawLayers.forEach(l => {
-                if (on && l.id === 'blob' && l.mode === 'outline') l.mode = 'outline_fill';
+                if (on && l.kind === 'blob' && l.mode === 'outline') l.mode = 'outline_fill';
                 if (!on && FILL_MODES.includes(l.mode)) l.mode = 'outline';
             });
         }
@@ -2438,15 +2407,15 @@
                 const [x0, y0, x1, y1] = r.bbox;
                 if (q.x < x0 - t - 1 || q.x > x1 + t + 1 || q.y < y0 - t - 1 || q.y > y1 + t + 1) continue;
                 const inside = r.outline.reduce((c, p) => c !== insidePolygon(q, p), false);
-                const d = inside ? 0 : Math.min(near(r.outline, true), near(r.center, false));
+                const d = inside ? 0 : Math.min(near(r.outline, true), near(r.kind === 'line' ? r.center : [], false));
                 if (d <= bestD) { best = r; bestD = d; }
             }
             return best;
         }
 
-        // 圖層面板（目前只有點陣圖）：每層＝勾選、顏色、名稱、區域數、刪除 / 畫法、上下移（上面的先畫）
+        // 圖層面板：每層＝勾選、顏色、名稱、區域數、刪除 / 畫法、上下移（上面的先畫）
         function renderLayerPanel() {
-            document.getElementById('layer-section').classList.toggle('hidden', isSvgSource || !drawLayers.length);
+            document.getElementById('layer-section').classList.toggle('hidden', !drawLayers.length);
             const d = i18n[currentLang];
             const modes = [['center', d.modeCenter], ['outline_fill', d.modeOutlineFill], ['outline', d.modeOutline], ['fill', d.modeFill]];
             const btn = 'px-1.5 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-300 dark:hover:bg-slate-600 disabled:opacity-30';
@@ -2457,7 +2426,7 @@
                         <span class="w-2.5 h-2.5 rounded-full shrink-0" style="background:${l.color}"></span>
                         <input data-act="name" value="${escAttr(layerName(l))}" class="min-w-0 flex-1 bg-transparent text-[11px] font-bold text-slate-700 dark:text-slate-200 outline-none">
                         <span data-act="count" title="${d.layerCount}" class="text-[10px] font-mono text-slate-400">${drawRegions.filter(r => r.layerId === l.id).length}</span>
-                        ${AUTO_LAYERS.includes(l.id) ? '' : `<button data-act="del" title="${d.layerDel}" class="${btn}">✕</button>`}
+                        ${l.auto ? '' : `<button data-act="del" title="${d.layerDel}" class="${btn}">✕</button>`}
                     </div>
                     <div class="flex items-center gap-1">
                         <select data-act="mode" class="flex-1 min-w-0 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-1 rounded text-[10px] text-slate-800 dark:text-white outline-none">
@@ -2506,7 +2475,7 @@
         function deleteLayer(l) {
             drawLayers = drawLayers.filter(x => x !== l);
             regionOverrides = regionOverrides.filter(o => o.layerId !== l.id);
-            drawRegions.forEach(r => { if (r.layerId === l.id) r.layerId = r.kind; });
+            drawRegions.forEach(r => { if (r.layerId === l.id) r.layerId = r.auto; });
         }
 
         // 點預覽上的區域 → 小選單：移到哪個圖層（換圖層＝換畫法，例如被當成色塊的粗線移到細線層改畫中線）
@@ -2529,7 +2498,7 @@
             regionMenu.style.left = Math.max(0, Math.min(clientX - box.left, box.width - regionMenu.offsetWidth - 4)) + 'px';
             regionMenu.style.top = Math.max(0, Math.min(clientY - box.top, box.height - regionMenu.offsetHeight - 4)) + 'px';
             const path = (pts, closed) => `M ${pts.map(q => `${q.x * regionScale} ${q.y * regionScale}`).join(' L ')}${closed ? ' Z' : ''}`;
-            regionHighlight.innerHTML = [...r.outline.map(q => path(q, true)), ...r.center.map(q => path(q, false))]
+            regionHighlight.innerHTML = [...r.outline.map(q => path(q, true)), ...(r.kind === 'line' ? r.center : []).map(q => path(q, false))]
                 .map(dd => `<path d="${dd}" fill="none" stroke="#f59e0b" stroke-width="3" vector-effect="non-scaling-stroke" />`).join('');
         }
 
@@ -2561,27 +2530,20 @@
             let fillSpacing_mm = parseFloat(fillSpacingInput.value);
             if (isNaN(fillSpacing_mm) || fillSpacing_mm <= 0.05) fillSpacing_mm = 1.0;
 
-            const currentScale = isSvgSource ? (1000 / targetW_mm) : (previewCanvas.width / targetW_mm);
-            
-            let rawHatchLines;
-            if (isSvgSource) {
-                // 僅篩選出使用者勾選/點選要填滿的輪廓
-                const activeContours = finalContours.filter((_, idx) => selectedContourIndices.has(idx));
-                finalLines = [];
-                rawHatchLines = fillEnable.checked ? generateFillLines(activeContours, parseFloat(fillAngleSelect.value), fillSpacing_mm * currentScale) : [];
-            } else {
-                // 點陣圖：依圖層輸出中線、外框與填滿，填滿只在各自區域內，不會因為別的輪廓而內外顛倒。
-                // 每條路徑記下圖層順位（layer），G-code 一層畫完才換下一層，預覽也用圖層顏色。
-                const opts = { fillDeg: parseFloat(fillAngleSelect.value), fillSpacingPx: fillSpacing_mm * currentScale / regionScale };
-                const toCanvas = rank => p => Object.assign(p.map(q => ({ x: q.x * regionScale, y: q.y * regionScale })), { layer: rank });
-                finalLines = []; finalContours = []; rawHatchLines = [];
-                drawLayers.forEach((layer, rank) => {
-                    const out = GordixRegions.emit(drawRegions, [layer], opts);
-                    finalLines = finalLines.concat(out.open.map(toCanvas(rank)));
-                    finalContours = finalContours.concat(out.closed.map(toCanvas(rank)));
-                    rawHatchLines = rawHatchLines.concat(out.hatch.map(toCanvas(rank)));
-                });
-            }
+            const currentScale = previewCanvas.width / targetW_mm;
+
+            // 依圖層輸出中線、外框與填滿，填滿只在各自區域內，不會因為別的輪廓而內外顛倒。
+            // 每條路徑記下圖層順位（layer），G-code 一層畫完才換下一層，預覽也用圖層顏色。
+            const opts = { fillDeg: parseFloat(fillAngleSelect.value), fillSpacingPx: fillSpacing_mm * currentScale / regionScale };
+            const toCanvas = rank => p => Object.assign(p.map(q => ({ x: q.x * regionScale, y: q.y * regionScale })), { layer: rank });
+            let rawHatchLines = [];
+            finalLines = []; finalContours = [];
+            drawLayers.forEach((layer, rank) => {
+                const out = GordixRegions.emit(drawRegions, [layer], opts);
+                finalLines = finalLines.concat(out.open.map(toCanvas(rank)));
+                finalContours = finalContours.concat(out.closed.map(toCanvas(rank)));
+                rawHatchLines = rawHatchLines.concat(out.hatch.map(toCanvas(rank)));
+            });
             
             finalFillLines = [];
             const segPx = parseFloat(segmentSlider.value) * currentScale;
@@ -2655,11 +2617,10 @@
             }
         }
 
-        // 線條粗細：Z 軸筆觸用校準線寬；點陣圖用設定的線寬（看得出會不會糊在一起）；其餘維持細線
-        function strokeWidthAttr(px) {
+        // 線條粗細：Z 軸筆觸用校準線寬，其餘用設定的線寬（看得出會不會糊在一起）
+        function strokeWidthAttr() {
             if (pen.on) return `stroke-width="${pen.wLight / mmPerPx()}"`;
-            if (!isSvgSource) return `stroke-width="${(parseFloat(lineWidthInput.value) || 1) / mmPerPx()}" opacity="0.8"`;
-            return `stroke-width="${px}" vector-effect="non-scaling-stroke"`;
+            return `stroke-width="${(parseFloat(lineWidthInput.value) || 1) / mmPerPx()}" opacity="0.8"`;
         }
 
         function renderOverlay() {
@@ -2692,21 +2653,13 @@
             hatchGroup.innerHTML = hatchHtml;
             scheduleGcodeView();
 
-            // 渲染帶互動事件的向量輪廓圖案，所有輪廓皆保持實線（#10b981）以確保外框繪製
-            contourGroup.innerHTML = finalContours.map((p, idx) => {
-                const isSelected = isSvgSource && selectedContourIndices.has(idx);
-                const strokeColor = layerColor(p);
-                const showFillBg = fillEnable.checked && isSelected;
-                const fillColor = showFillBg ? "rgba(16, 185, 129, 0.15)" : "rgba(0, 0, 0, 0.001)";
-                const clickable = isSvgSource && fillEnable.checked;
-                const pointerEvents = clickable ? "all" : "none";
-                const cursor = clickable ? "pointer" : "default";
+            // 外框（封閉）與中線（不封閉），顏色 = 圖層顏色；點選改由區域選單處理，路徑本身不接滑鼠
+            contourGroup.innerHTML = finalContours.map(p => {
                 const d = `M ${p[0].x} ${p[0].y} ${p.slice(1).map(pt => `L ${pt.x} ${pt.y}`).join(' ')} Z`;
-                
-                return `<path d="${d}" data-index="${idx}" fill="${fillColor}" stroke="${strokeColor}" ${strokeWidthAttr(showFillBg ? 1.8 : 1.2)} style="pointer-events: ${pointerEvents}; cursor: ${cursor}; transition: all 0.15s;" class="hover:stroke-amber-400 hover:stroke-2 hover:fill-amber-400/20" />`;
+                return `<path d="${d}" fill="none" stroke="${layerColor(p)}" ${strokeWidthAttr()} stroke-linejoin="round" style="pointer-events: none;" />`;
             }).join('') + finalLines.map(p => {
                 const d = `M ${p[0].x} ${p[0].y} ${p.slice(1).map(pt => `L ${pt.x} ${pt.y}`).join(' ')}`;
-                return `<path d="${d}" fill="none" stroke="${layerColor(p)}" ${strokeWidthAttr(1.2)} stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;" />`;
+                return `<path d="${d}" fill="none" stroke="${layerColor(p)}" ${strokeWidthAttr()} stroke-linecap="round" stroke-linejoin="round" style="pointer-events: none;" />`;
             }).join('');
 
             updateLayerVisibility();

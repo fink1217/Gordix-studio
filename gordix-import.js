@@ -288,18 +288,6 @@ const GordixImport = (() => {
 
         const paths = [];
         const elements = svgEl.querySelectorAll('path, rect, circle, ellipse, line, polyline, polygon');
-        
-        function getSVGLayer(el) {
-            let parent = el.parentElement;
-            while (parent && parent.tagName.toLowerCase() !== 'svg') {
-                if (parent.tagName.toLowerCase() === 'g') {
-                    let label = parent.getAttribute('inkscape:label') || parent.getAttribute('id') || parent.getAttribute('class');
-                    if (label) return label;
-                }
-                parent = parent.parentElement;
-            }
-            return "Default";
-        }
 
         elements.forEach(el => {
             const type = el.tagName.toLowerCase();
@@ -319,7 +307,7 @@ const GordixImport = (() => {
                 return { x: px, y: -py };
             }
 
-            const layerName = getSVGLayer(el);
+            const layerName = svgLayer(el);
             const color = svgColor(el);
 
             if (type === 'path') {
@@ -455,6 +443,19 @@ const GordixImport = (() => {
         }));
     }
 
+    // 圖層名：最近一層有名字的 <g>（inkscape:label → id → class），都沒有就是 Default
+    function svgLayer(el) {
+        let parent = el.parentElement;
+        while (parent && parent.tagName.toLowerCase() !== 'svg') {
+            if (parent.tagName.toLowerCase() === 'g') {
+                let label = parent.getAttribute('inkscape:label') || parent.getAttribute('id') || parent.getAttribute('class');
+                if (label) return label;
+            }
+            parent = parent.parentElement;
+        }
+        return "Default";
+    }
+
     // 把瀏覽器算出的顏色（rgb(...) 或 none）轉成 #rrggbb；沒有顏色時回傳 null
     function toHex(css) {
         const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(css || '');
@@ -558,5 +559,5 @@ const GordixImport = (() => {
         return [...groups].map(([key, list]) => ({ key, paths: list }));
     }
 
-    return { load, loadBitmap, realWidth, autoGroupMode, groupPaths, simplifyPath };
+    return { load, loadBitmap, realWidth, autoGroupMode, groupPaths, simplifyPath, svgLayer, svgColor };
 })();
