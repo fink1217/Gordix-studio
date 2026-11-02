@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Draw Converter</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 數字欄位可以輸入算式（+ - * /） -->
+    <script src="gordix-calc.js?v=10"></script>
     <!-- 3D G-code 預覽（與 CNC.html 相同版本） -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
@@ -342,6 +344,10 @@
                     </div>
                     <div id="region-menu" class="hidden absolute z-20 min-w-[8rem] p-1 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 shadow-xl text-[11px] font-bold"></div>
                     <div id="ws-warning" class="hidden absolute top-3 inset-x-3 flex flex-col items-center gap-1 pointer-events-none"></div>
+                    <div class="absolute bottom-3 right-16 flex gap-1">
+                        <button id="btn-undo" title="Ctrl+Z" disabled class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800/80 text-white border border-slate-600 hover:bg-slate-700 disabled:opacity-30">↶</button>
+                        <button id="btn-redo" title="Ctrl+Y" disabled class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-800/80 text-white border border-slate-600 hover:bg-slate-700 disabled:opacity-30">↷</button>
+                    </div>
                     <button id="btn-fit-view" class="absolute bottom-3 right-3 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-slate-800/80 text-white border border-slate-600 hover:bg-slate-700">全景</button>
                 </div>
                 <!-- G-code 進度：機器面板的百分比是行數比例；拉到同樣的百分比可以看畫到哪，並產生續畫檔 -->
@@ -975,6 +981,8 @@
         let regionOverrides = []; // 手動指定圖層：{x, y, tol（預覽畫布像素）, layerId}；重新分析後依位置找回同一塊
         let menuRegion = null;    // 區域選單開著時點到的區域與位置
         let layerSeq = 1;         // 新增圖層的編號
+        // 復原 / 重做：每次改完（停 0.3 秒）存一份快照；換檔時清空
+        var drawHistory = { stack: [], index: -1 }, commitTimer = 0;
         let gcodeView = null;     // G-code 預覽（GordixPreview.parse 的結果，y 已換成筆尖位置）；路徑或位置改了就作廢
         let gcodeTimer = 0;
         let gcodeMarker = null;   // 2D 上的續畫起點
@@ -1237,7 +1245,61 @@
             wsWarning.classList.toggle('hidden', warnings.length === 0);
 
             syncPanel();
+            scheduleCommit();
         }
+
+        function drawSnapshot() {
+            return JSON.stringify({ x: design.x, y: design.y, w: widthInput.value, layers: drawLayers, overrides: regionOverrides, layerSeq, fill: fillEnable.checked });
+        }
+        function scheduleCommit() {
+            clearTimeout(commitTimer);
+            commitTimer = setTimeout(commitDraw, 300);
+        }
+        function commitDraw() {
+            if (!originalImage || !drawRegions.length && !finalContours.length) return;
+            const snap = drawSnapshot();
+            if (drawHistory.stack[drawHistory.index] === snap) return;
+            drawHistory.stack = drawHistory.stack.slice(0, drawHistory.index + 1);
+            drawHistory.stack.push(snap);
+            if (drawHistory.stack.length > 80) drawHistory.stack.shift();
+            drawHistory.index = drawHistory.stack.length - 1;
+            renderUndo();
+        }
+        // 還原：區域的圖層依「手動指定的位置」重新找回（和重新分析後的做法相同），所以改過門檻也能復原
+        function restoreDraw(i) {
+            const d = JSON.parse(drawHistory.stack[i]);
+            drawHistory.index = i;
+            design.x = d.x; design.y = d.y;
+            widthInput.value = d.w;
+            drawLayers = d.layers; regionOverrides = d.overrides; layerSeq = d.layerSeq;
+            fillEnable.checked = d.fill;
+            applyFillUi();
+            drawRegions.forEach(r => { r.layerId = r.auto; });
+            regionOverrides.forEach(o => {
+                const r = regionAt(o.x, o.y, o.tol);
+                if (r && drawLayers.some(l => l.id === o.layerId)) r.layerId = o.layerId;
+            });
+            closeRegionMenu();
+            recomputeFillLines();
+            scheduleGcodeView();
+            renderUndo();
+        }
+        const undoDraw = () => { clearTimeout(commitTimer); commitDraw(); if (drawHistory.index > 0) restoreDraw(drawHistory.index - 1); };
+        const redoDraw = () => { if (drawHistory.index < drawHistory.stack.length - 1) restoreDraw(drawHistory.index + 1); };
+        function renderUndo() {
+            document.getElementById('btn-undo').disabled = drawHistory.index <= 0;
+            document.getElementById('btn-redo').disabled = drawHistory.index >= drawHistory.stack.length - 1;
+        }
+        document.getElementById('btn-undo').onclick = undoDraw;
+        document.getElementById('btn-redo').onclick = redoDraw;
+        // 在文字框裡按 Ctrl+Z 交給文字框自己（復原打的字）
+        document.addEventListener('keydown', e => {
+            const t = e.target;
+            if ((t.tagName === 'INPUT' && !['checkbox', 'range', 'file'].includes(t.type)) || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return;
+            const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+            if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redoDraw() : undoDraw(); }
+            else if (mod && k === 'y') { e.preventDefault(); redoDraw(); }
+        });
 
         function penYOffset() {
             const dPen = parseFloat(penDiamInput.value) || 0;
@@ -1685,6 +1747,8 @@ ${boardLine}`;
             drawLayers = [];
             designBox = null;
             regionOverrides = [];
+            drawHistory.stack = []; drawHistory.index = -1;
+            renderUndo();
             closeRegionMenu();
             progressSlider.value = 1000;
             originalPixelData = null;

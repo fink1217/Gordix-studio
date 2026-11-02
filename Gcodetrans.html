@@ -9,6 +9,8 @@
     <script src="gordix-preview.js?v=10"></script>
     <script src="gordix-sim.js?v=10"></script>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 數字欄位可以輸入算式（+ - * /） -->
+    <script src="gordix-calc.js?v=10"></script>
     <script>
         tailwind.config = {
             darkMode: 'class'
@@ -132,7 +134,7 @@
         canvas { display: block; }
         
         /* 雙主題輸入框 */
-        input[type="number"], input[type="range"] {
+        input[type="number"], input[data-calc], input[type="range"] {
             background-color: var(--input-bg);
             border: 1px solid var(--input-border);
             color: var(--input-text);
@@ -141,7 +143,7 @@
             border-radius: 0.375rem;
             transition: all 0.3s;
         }
-        input[type="number"]:focus {
+        input[type="number"]:focus, input[data-calc]:focus {
             outline: none;
             border-color: var(--primary-green);
         }
