@@ -205,6 +205,8 @@ const GordixCam = (() => {
             intermediatePaths.push([...scaledPath, scaledPath[0]]);
         } else {
             const co = new ClipperLib.ClipperOffset();
+            // Clipper 使用放大座標；圓角誤差也必須由毫米換算，避免預設值產生大量短線段。
+            co.ArcTolerance = 0.005 * scale;
             co.AddPath(pX, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
             let delta = cfg.type === 'outer' ? (cfg.d/2)*scale : -(cfg.d/2)*scale;
             let offsetResult = new ClipperLib.Paths();
@@ -240,6 +242,7 @@ const GordixCam = (() => {
                     const islands = outerNode.Childs().map(n => n.Contour());
                     if (islands.length > 0) {
                         const islandOffsetter = new ClipperLib.ClipperOffset();
+                        islandOffsetter.ArcTolerance = 0.005 * scale;
                         islands.forEach(isl => islandOffsetter.AddPath(isl, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon));
                         let islandOuters = new ClipperLib.Paths();
                         islandOffsetter.Execute(islandOuters, (cfg.d/2)*scale);
@@ -250,6 +253,7 @@ const GordixCam = (() => {
                         });
                     }
                     const subjectOffsetter = new ClipperLib.ClipperOffset();
+                    subjectOffsetter.ArcTolerance = 0.005 * scale;
                     subjectOffsetter.AddPath(subjectPath, ClipperLib.JoinType.jtRound, ClipperLib.EndType.etClosedPolygon);
                     let subjectInners = new ClipperLib.Paths();
                     subjectOffsetter.Execute(subjectInners, -(cfg.d/2)*scale);
