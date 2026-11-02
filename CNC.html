@@ -147,6 +147,8 @@
                 <label class="flex items-center gap-1"><input type="checkbox" id="opt-foot" class="accent-orange-500"><span data-i18n="optFoot"></span></label>
                 <label class="flex items-center gap-1"><input type="checkbox" id="opt-zone" class="accent-orange-500" checked><span data-i18n="optZone"></span></label>
                 <span class="flex-1"></span>
+                <button id="btn-undo" class="btn btn-sub disabled:opacity-40" title="Ctrl+Z" disabled>↶</button>
+                <button id="btn-redo" class="btn btn-sub disabled:opacity-40" title="Ctrl+Y" disabled>↷</button>
                 <button id="btn-top" data-i18n="btnTop" class="btn btn-sub hidden"></button>
                 <button id="btn-fit" data-i18n="btnFit" class="btn btn-sub"></button>
             </div>
@@ -197,6 +199,10 @@
                         <label class="num-field"><span>Y</span><span class="num-wrap" data-unit="mm"><input type="number" id="op-y" class="num-in" step="0.1"></span></label>
                         <label class="num-field"><span data-i18n="width"></span><span class="num-wrap" data-unit="mm"><input type="number" id="op-w" class="num-in" min="0.1" step="0.1"></span></label>
                         <label class="num-field"><span data-i18n="height"></span><span class="num-wrap" data-unit="mm"><input type="number" id="op-h" class="num-in" min="0.1" step="0.1"></span></label>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button id="op-group" data-i18n="group" class="btn btn-sub"></button>
+                        <button id="op-ungroup" data-i18n="ungroup" class="btn btn-sub"></button>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         <button id="op-board" data-i18n="centerBoard" class="btn btn-sub"></button>
@@ -257,7 +263,8 @@ const i18n = {
         advice: '材質「{mat}」建議：走速 F{fr} · 每層 {dr} mm · 修邊機刻度 {dial}', adviceCap: '（夾板實測建議每層 ≤ {cap} mm）', adviceNone: '材質「{mat}」沒有 CNC 建議值',
         warnF: '⚠ 走速 F{v} 超出建議 F{fr}', warnStep: '⚠ 每層 {v} mm 超過建議上限 {max} mm',
         optWidth: '實際刀寬', optOrder: '加工順序', optFoot: '機器底面', btnTop: '俯視', btnFit: '全景',
-        empty: '請先選擇檔案', hint: '點圖形選取（Shift 多選）、拖曳移動；拖曳空白處平移，滾輪縮放，雙擊空白處回到全景。',
+        empty: '請先選擇檔案', hint: '點圖形選取整個群組（雙擊只選單一物件、Shift 多選）、拖曳移動；拖曳空白處平移，滾輪縮放，雙擊空白處回到全景。Ctrl+Z 復原、Ctrl+Y 重做、Ctrl+G 群組、Ctrl+Shift+G 解散、Delete 刪除。',
+        group: '群組（Ctrl+G）', ungroup: '解散群組', groupItem: '群組 {n}（{c} 個）', objItem: '物件 {n}', objCountG: '已選 {n} 個物件（{g} 個群組）',
         secLayer: '圖層設定', delLayer: '刪除圖層', op: '加工方式', tool: '刀具', depth: '深度', through: '切穿', tabs: '保留橋位（切穿時避免零件飛出）',
         opProfile: '輪廓（自動判斷內外）', opOuter: '外輪廓', opInner: '內輪廓', opPocket: '挖槽', opLaser: '雷射切割', opVcarve: 'V 雕刻', opEngrave: '沿線雕刻',
         carveSide: '雕哪一部分', sideOdd: '圖形本身（單獨的字、圖案）', sideEven: '框裡的字（外框留著）',
@@ -292,7 +299,8 @@ const i18n = {
         advice: '{mat}: feed F{fr} · {dr} mm per pass · router dial {dial}', adviceCap: ' (plywood field test: ≤ {cap} mm per pass)', adviceNone: 'No CNC data for {mat}',
         warnF: '⚠ Feed F{v} outside the suggested F{fr}', warnStep: '⚠ {v} mm per pass exceeds the suggested {max} mm',
         optWidth: 'Real bit width', optOrder: 'Order', optFoot: 'Machine footprint', btnTop: 'Top view', btnFit: 'Fit',
-        empty: 'Choose a file first', hint: 'Click a shape to select (Shift for more), drag to move; drag empty space to pan, wheel to zoom, double-click empty space to fit.',
+        empty: 'Choose a file first', hint: 'Click a shape to select its whole group (double-click for one object, Shift for more), drag to move; drag empty space to pan, wheel to zoom, double-click empty space to fit. Ctrl+Z undo, Ctrl+Y redo, Ctrl+G group, Ctrl+Shift+G ungroup, Delete removes.',
+        group: 'Group (Ctrl+G)', ungroup: 'Ungroup', groupItem: 'Group {n} ({c})', objItem: 'Object {n}', objCountG: '{n} objects selected ({g} groups)',
         secLayer: 'Layer settings', delLayer: 'Delete layer', op: 'Operation', tool: 'Tool', depth: 'Depth', through: 'Cut through', tabs: 'Keep tabs (stop parts flying out)',
         opProfile: 'Profile (auto inside/outside)', opOuter: 'Outside profile', opInner: 'Inside profile', opPocket: 'Pocket', opLaser: 'Laser cut', opVcarve: 'V-carve', opEngrave: 'Engrave along lines',
         carveSide: 'Carve which part', sideOdd: 'The shapes themselves (letters, figures)', sideEven: 'Letters inside a frame (frame stays)',
@@ -368,8 +376,56 @@ const OPS = ['profile', 'outer', 'inner', 'pocket', 'vcarve', 'engrave', 'laser'
 const OP_KEY = { profile: 'opProfile', outer: 'opOuter', inner: 'opInner', pocket: 'opPocket', laser: 'opLaser', vcarve: 'opVcarve', engrave: 'opEngrave', drillMark: 'opDrill' };
 const isCarveOp = op => op === 'vcarve' || op === 'engrave';   // 立體雕刻：一次到深（或依刀具分層），沒有切穿
 let source = null, groupMode = 'layer', layerSeq = 0, files = [];
-let selLayerId = null;
+let selLayerId = null, groupSeq = 0;
 const selObjs = new Set();
+const expanded = new Set();   // 圖層清單展開的圖層
+
+// 群組：o.groupId 相同的物件一起選、一起移動
+const groupOf = o => o.groupId ? job.objects.filter(x => x.groupId === o.groupId) : [o];
+
+// 自動群組：最外層的圖形連同它包住的所有圖形（不分圖層）是一個零件；沒有包住別人的單獨圖形不分組
+function autoGroup() {
+    const shapes = job.objects.map(o => ({ o, points: o.points, bounds: GordixCam.boundsOf(o.points) }));
+    const area = sh => (sh.bounds.maxX - sh.bounds.minX) * (sh.bounds.maxY - sh.bounds.minY);
+    const members = new Map();
+    shapes.forEach(sh => {
+        const outer = shapes.filter(t => t !== sh && area(t) > area(sh) && GordixCam.isInsideOther(sh, t));
+        const top = outer.length ? outer.reduce((a, b) => area(a) > area(b) ? a : b) : sh;
+        if (!members.has(top)) members.set(top, []);
+        members.get(top).push(sh.o);
+    });
+    job.objects.forEach(o => { o.groupId = null; });
+    members.forEach(list => { if (list.length > 1) { const g = 'G' + (++groupSeq); list.forEach(o => { o.groupId = g; }); } });
+}
+
+// ===== 復原 / 重做：每次改完存一份圖層與物件的快照（刀具庫另外存，不在這裡）=====
+const history = { stack: [], index: -1 };
+const snapshot = () => JSON.stringify({ layers: job.layers, objects: job.objects, layerSeq });
+function commit() {
+    const s = snapshot();
+    if (history.stack[history.index] === s) return;
+    history.stack = history.stack.slice(0, history.index + 1);
+    history.stack.push(s);
+    if (history.stack.length > 80) history.stack.shift();
+    history.index = history.stack.length - 1;
+    renderUndo();
+}
+function restore(i) {
+    const d = JSON.parse(history.stack[i]);
+    history.index = i;
+    job.layers = d.layers; job.objects = d.objects; layerSeq = d.layerSeq;
+    const ids = new Set(job.objects.map(o => o.id));
+    [...selObjs].forEach(id => { if (!ids.has(id)) selObjs.delete(id); });
+    if (!job.layers.some(l => l.id === selLayerId)) selLayerId = job.layers.length ? job.layers[0].id : null;
+    rebuild(false);
+    renderUndo();
+}
+const undo = () => { if (history.index > 0) restore(history.index - 1); };
+const redo = () => { if (history.index < history.stack.length - 1) restore(history.index + 1); };
+function renderUndo() {
+    $('btn-undo').disabled = history.index <= 0;
+    $('btn-redo').disabled = history.index >= history.stack.length - 1;
+}
 
 const isRouterOp = op => GordixCam.OPS[op].head === 'router';
 const firstFlat = () => (tools.find(t => t.type === 'flat') || tools[0] || {}).id || null;
@@ -420,8 +476,10 @@ async function importSource(keepCenter) {
     groups.forEach((g, i) => g.paths.forEach(p => job.objects.push({
         id: job.objects.length + 1, layerId: job.layers[i].id, points: p.points.map(q => ({ x: q.x + c.x, y: q.y + c.y }))
     })));
+    autoGroup();
     selObjs.clear();
     selLayerId = job.layers.length ? job.layers[0].id : null;
+    history.stack = []; history.index = -1;   // 換檔或重新讀檔：從這裡開始記
     rebuild();
 }
 let importTimer = 0;
@@ -436,7 +494,8 @@ document.querySelectorAll('[data-group]').forEach(b => b.onclick = () => {
 ['overcut', 'safe-z', 'resolution'].forEach(id => $(id).addEventListener('change', rebuild));
 
 // ===== 刀路計算：gordix-cam.js 依圖層與刀具分檔 =====
-function rebuild() {
+// record = false：復原 / 重做時重算，不再記一筆
+function rebuild(record = true) {
     job.thickness = stock.t;
     job.overcut = Math.max(0, parseFloat($('overcut').value) || 0);
     job.safeZ = Math.max(0.5, parseFloat($('safe-z').value) || 2);
@@ -445,6 +504,7 @@ function rebuild() {
     buildLayout();
     renderAll();
     schedulePreview();
+    if (record && job.objects.length) commit();
 }
 
 function renderAll() {
@@ -483,7 +543,9 @@ function renderLayers() {
         const tool = isRouterOp(l.op) ? toolName(toolById(l.toolId)) : '';
         const depth = l.op === 'laser' ? '' : (l.through ? L.through : `${l.depth} mm`);
         const warn = layerWarnings(l).length ? '<span class="text-amber-500">⚠</span>' : '';
+        const open = expanded.has(l.id);
         return `<div class="row p-2 flex items-center gap-2 ${l.id === selLayerId ? 'active' : ''}" data-layer="${l.id}">
+            <button data-act="expand" class="w-4 text-[10px] text-slate-500 shrink-0">${open ? '▾' : '▸'}</button>
             <input type="checkbox" data-act="visible" ${l.visible ? 'checked' : ''} class="accent-orange-500" title="${L.hidden}">
             <span class="w-3 h-3 rounded-sm shrink-0" style="background:${l.color}"></span>
             <div class="min-w-0 flex-1">
@@ -491,14 +553,40 @@ function renderLayers() {
                 <div class="text-[10px] text-slate-500 truncate">${L[OP_KEY[l.op]]}${tool ? ' · ' + tool : ''}${depth ? ' · ' + depth : ''}</div>
             </div>
             <span class="text-[10px] text-slate-500">${fill(L.objs, { n })}</span>
-        </div>`;
+        </div>${open ? layerItems(l) : ''}`;
     }).join('');
 }
 
+// 展開的圖層：這一層裡的群組與單獨物件，點一下選取
+function layerItems(l) {
+    const L = T(), gNum = new Map();
+    job.objects.forEach(o => { if (o.groupId && !gNum.has(o.groupId)) gNum.set(o.groupId, gNum.size + 1); });
+    const seen = new Set(), items = [];
+    job.objects.filter(o => o.layerId === l.id).forEach(o => {
+        if (o.groupId) {
+            if (seen.has(o.groupId)) return;
+            seen.add(o.groupId);
+            const all = job.objects.filter(x => x.groupId === o.groupId);
+            items.push({ key: 'g:' + o.groupId, label: fill(L.groupItem, { n: gNum.get(o.groupId), c: all.length }), on: all.every(x => selObjs.has(x.id)) });
+        } else items.push({ key: 'o:' + o.id, label: fill(L.objItem, { n: o.id }), on: selObjs.has(o.id) });
+    });
+    return `<div class="ml-6 space-y-0.5">${items.map(it => `<button data-pick="${it.key}" class="block w-full text-left text-[11px] px-2 py-0.5 rounded hover:bg-slate-500/10 ${it.on ? 'text-yellow-500 font-bold' : ''}">${esc(it.label)}</button>`).join('')}</div>`;
+}
+
 $('layer-list').addEventListener('click', e => {
+    const pick = e.target.closest('[data-pick]');
+    if (pick) {
+        const [kind, id] = pick.dataset.pick.split(':');
+        const objs = kind === 'g' ? job.objects.filter(o => o.groupId === id) : job.objects.filter(o => o.id === +id);
+        if (!e.shiftKey) selObjs.clear();
+        objs.forEach(o => selObjs.add(o.id));
+        renderAll();
+        return;
+    }
     const row = e.target.closest('[data-layer]');
     if (!row) return;
     const l = job.layers.find(x => x.id === row.dataset.layer);
+    if (e.target.dataset.act === 'expand') { expanded.has(l.id) ? expanded.delete(l.id) : expanded.add(l.id); renderLayers(); return; }
     if (e.target.dataset.act === 'visible') { l.visible = e.target.checked; rebuild(); return; }
     selLayerId = l.id;
     selObjs.clear();
@@ -561,6 +649,8 @@ function toolAdviceLines(t) {
 
 const curLayer = () => job.layers.find(x => x.id === selLayerId);
 $('lp-name').addEventListener('input', e => { curLayer().name = e.target.value; renderLayers(); });
+$('lp-name').addEventListener('change', commit);
+$('lp-color').addEventListener('change', commit);
 $('lp-color').addEventListener('input', e => { curLayer().color = e.target.value; renderLayers(); render2D(); });
 $('lp-op').onchange = e => {
     const l = curLayer();
@@ -664,7 +754,10 @@ function renderObjPanel() {
     if (!sel.length) return;
     const b = selectionBox(sel);
     const set = (id, v) => { if (document.activeElement !== $(id)) $(id).value = v; };
-    $('op-count').innerText = fill(L.objCount, { n: sel.length });
+    const groups = new Set(sel.map(o => o.groupId).filter(Boolean)).size;
+    $('op-count').innerText = groups ? fill(L.objCountG, { n: sel.length, g: groups }) : fill(L.objCount, { n: sel.length });
+    $('op-group').disabled = sel.length < 2;
+    $('op-ungroup').disabled = !groups;
     $('op-layer').innerHTML = job.layers.map(l => `<option value="${l.id}">${esc(l.name)}</option>`).join('');
     const layersOfSel = new Set(sel.map(o => o.layerId));
     $('op-layer').value = layersOfSel.size === 1 ? [...layersOfSel][0] : '';
@@ -692,6 +785,16 @@ $('op-board').onclick = () => {
     transformSel(p => ({ x: p.x + dx, y: p.y + dy }));
     rebuild();
 };
+function groupSel() {
+    const sel = selected();
+    if (sel.length < 2) return;
+    const g = 'G' + (++groupSeq);
+    sel.forEach(o => { o.groupId = g; });
+    rebuild();
+}
+function ungroupSel() { selected().forEach(o => { o.groupId = null; }); rebuild(); }
+$('op-group').onclick = groupSel;
+$('op-ungroup').onclick = ungroupSel;
 $('op-delete').onclick = () => { job.objects = job.objects.filter(o => !selObjs.has(o.id)); selObjs.clear(); rebuild(); };
 $('op-all').onclick = () => { job.objects.forEach(o => selObjs.add(o.id)); renderAll(); };
 
@@ -886,10 +989,23 @@ ws.addEventListener('pointerdown', e => {
     const el = e.target.closest('[data-obj]');
     drag.moved = false;
     drag.last = toSvg(e.clientX, e.clientY);
+    // 雙擊自己判斷（第一下點擊會重畫預覽，瀏覽器的 dblclick 事件不會觸發）：0.4 秒內同一處點兩下
+    const now = performance.now(), key = el ? el.dataset.obj : 'empty';
+    const dbl = drag.tap && drag.tap.key === key && now - drag.tap.t < 400 && Math.hypot(e.clientX - drag.tap.x, e.clientY - drag.tap.y) < 8;
+    drag.tap = dbl ? null : { key, t: now, x: e.clientX, y: e.clientY };
+    if (dbl && !el) { drag.mode = null; fitView(); return; }          // 雙擊空白處：回到全景
+    if (dbl && el) {                                                   // 雙擊群組裡的物件：只選它
+        selObjs.clear(); selObjs.add(+el.dataset.obj);
+        drag.mode = 'move';
+        renderAll();
+        return;
+    }
     if (el) {
-        const id = +el.dataset.obj;
-        if (e.shiftKey) { selObjs.has(id) ? selObjs.delete(id) : selObjs.add(id); }
-        else if (!selObjs.has(id)) { selObjs.clear(); selObjs.add(id); }
+        const id = +el.dataset.obj, o = job.objects.find(x => x.id === id), members = e.altKey ? [o] : groupOf(o);
+        if (e.shiftKey) {
+            const all = members.every(m => selObjs.has(m.id));
+            members.forEach(m => all ? selObjs.delete(m.id) : selObjs.add(m.id));
+        } else if (!selObjs.has(id)) { selObjs.clear(); members.forEach(m => selObjs.add(m.id)); }
         selLayerId = job.objects.find(o => o.id === id).layerId;
         drag.mode = 'move';
         renderAll();
@@ -931,7 +1047,6 @@ const endDrag = e => {
 ws.addEventListener('pointerup', endDrag);
 ws.addEventListener('pointercancel', endDrag);
 ws.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.pow(1.1, -e.deltaY / 100)); }, { passive: false });
-ws.addEventListener('dblclick', e => { if (!e.target.closest('[data-obj]')) fitView(); });
 ['opt-width', 'opt-order', 'opt-foot', 'opt-zone'].forEach(id => $(id).onchange = render2D);
 $('btn-fit').onclick = () => { is3d ? view3d.setTop(false) : fitView(); };
 
@@ -1023,6 +1138,19 @@ function setView(on3d) {
 $('view-2d').onclick = () => setView(false);
 $('view-3d').onclick = () => setView(true);
 $('btn-top').onclick = () => view3d && view3d.setTop(true);
+$('btn-undo').onclick = undo;
+$('btn-redo').onclick = redo;
+document.addEventListener('keydown', e => {
+    const t = e.target;
+    if ((t.tagName === 'INPUT' && !['checkbox', 'range', 'file'].includes(t.type)) || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT') return;
+    const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+    if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); }
+    else if (mod && k === 'y') { e.preventDefault(); redo(); }
+    else if (mod && k === 'g') { e.preventDefault(); e.shiftKey ? ungroupSel() : groupSel(); }
+    else if (mod && k === 'a' && job.objects.length) { e.preventDefault(); job.objects.forEach(o => selObjs.add(o.id)); renderAll(); }
+    else if ((k === 'delete' || k === 'backspace') && selObjs.size) { e.preventDefault(); $('op-delete').click(); }
+    else if (k === 'escape' && selObjs.size) { selObjs.clear(); renderAll(); }
+});
 
 // ===== 語言、主題、進階 =====
 function applyLang() {
