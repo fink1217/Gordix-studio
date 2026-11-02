@@ -21,6 +21,8 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.min.js"></script>
+    <script src="gordix-table.js?v=7"></script>
+    <script src="gordix-materials.js?v=7"></script>
 
     <style>
         body { 
@@ -232,6 +234,16 @@
                 <div id="job-panel" class="panel p-6 rounded-xl hidden shadow-2xl border-t-4 border-t-red-600">
                     <h2 class="text-sm font-bold text-red-500 mb-6" data-i18n="jobSettings">加工參數設定(mm)</h2>
                     <div class="space-y-6">
+                        <!-- 建議參數：毛胚材質（步驟 2 選）＋ 下面選的刀具類型與刀徑 → 走速 -->
+                        <div id="vc-advice" class="p-4 rounded-lg space-y-2 bg-red-500/5 border border-red-500/30">
+                            <div class="flex justify-between items-center gap-2">
+                                <h3 id="adv-title" class="text-[10px] font-bold text-red-600 dark:text-red-400"></h3>
+                                <a href="stock.html" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline shrink-0" data-i18n="advStock">毛胚設定 →</a>
+                            </div>
+                            <div id="adv-body" class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line"></div>
+                            <div id="adv-warn" class="hidden text-[11px] font-bold text-amber-600 dark:text-amber-400"></div>
+                            <button id="btn-adv-apply" class="w-full py-2 rounded-lg text-xs font-bold bg-red-500/15 text-red-600 dark:text-red-300 hover:bg-red-500/25" data-i18n="advApply">帶入建議走速</button>
+                        </div>
                         <div class="p-4 bg-slate-100 dark:bg-slate-950/50 rounded-lg space-y-4">
                             <h3 class="text-[10px] font-bold text-slate-500 dark:text-slate-400" data-i18n="groupSize">選中零件群組尺寸</h3>
                             <div class="grid grid-cols-2 gap-4">
@@ -386,6 +398,11 @@
                 height: "高度",
                 resolution: "解析度",
                 feedRate: "進給速率",
+                advTitle: "建議參數 · {m} · {t} mm", advStock: "毛胚設定 →", advApply: "帶入建議走速",
+                advBody: "{tool} Ø{d}：建議走速 F{fr}（已帶入 F{f}）· 修邊機刻度 {dial}\n雕刻一次到深，深度由刀尖角度與圖形寬度決定，不套用每刀深度。",
+                advVbit: "V 刀", advBall: "圓頭刀",
+                advNoCnc: "這個材質沒有 CNC 建議值（例如紙、玻璃），請到毛胚設定換材質。",
+                advWarnF: "⚠ 走速 F{v} 超出建議 F{fr}",
                 toolType: "刀具類型",
                 optToolVBit: "V型雕刻刀",
                 optToolBallNose: "圓頭刀 (Ball Nose)",
@@ -440,6 +457,11 @@
                 height: "Height",
                 resolution: "Resolution (mm)",
                 feedRate: "Feed Rate",
+                advTitle: "Suggested · {m} · {t} mm", advStock: "Stock setup →", advApply: "Fill in suggested feed",
+                advBody: "{tool} Ø{d}: suggested feed F{fr} (filled in F{f}) · router dial {dial}\nCarves to full depth in one pass; depth comes from the tip angle and shape width, so depth per pass does not apply.",
+                advVbit: "V-bit", advBall: "Ball nose",
+                advNoCnc: "No CNC data for this material (e.g. paper, glass). Change the material in Stock setup.",
+                advWarnF: "⚠ Feed F{v} is outside the suggested F{fr}",
                 toolType: "Tool Type",
                 optToolVBit: "V-Carve Bit",
                 optToolBallNose: "Ball Nose Cutter",
@@ -1290,7 +1312,7 @@
                     currentDim: { w: pMaxX-pMinX, h: pMaxY-pMinY }, 
                     visible: true, 
                     jobConfig: { 
-                        type: 'vcarve', f: 1000, d: 6.0, depth: 3.0, 
+                        type: 'vcarve', f: adviceFeed(), d: 6.0, depth: 3.0, 
                         overlap: 1.80, resolution: 0.2, vbitAngle: 90,
                         toolType: 'vbit', pathAngle: 0, carveLayer: 'even'
                     }, 
@@ -1317,6 +1339,40 @@
                 }
             });
             renderPartList();
+            renderAdvice();
+        }
+
+        // ===== 建議參數：毛胚材質 × 刀具（V 刀、圓頭刀都以 2 刃直刃換算走速，取建議下限）=====
+        const stock = GordixTable.loadBoard();
+        function vcAdvice() {
+            const d = parseFloat(document.getElementById('mill-d').value) || 6.0;
+            return { d, a: GordixMaterials.cncAdvice(stock.material, { d, flutes: 2, type: 'straight' }) };
+        }
+        function adviceFeed() { const { a } = vcAdvice(); return a ? a.feed : 1000; }
+
+        function applyAdvice() {
+            const { a } = vcAdvice();
+            if (!a) return;
+            const f = document.getElementById('job-f');
+            f.value = a.feed;
+            selectedIndices.forEach(idx => { if (parts[idx]) parts[idx].jobConfig.f = a.feed; });
+            f.dispatchEvent(new Event('input'));
+            renderAdvice();
+        }
+
+        function renderAdvice() {
+            const t = i18n[currentLang];
+            const fill = (s, o) => Object.entries(o).reduce((r, [k, v]) => r.split(`{${k}}`).join(v), s);
+            document.getElementById('adv-title').innerText = fill(t.advTitle, { m: GordixMaterials.name(stock.material, currentLang), t: stock.t });
+            const { d, a } = vcAdvice();
+            const f = parseFloat(document.getElementById('job-f').value);
+            const tool = document.getElementById('tool-type-select').value === 'ballnose' ? t.advBall : t.advVbit;
+            const fr = a ? (a.minF === a.maxF ? a.minF : `${a.minF}～${a.maxF}`) : '';
+            document.getElementById('adv-body').innerText = a ? fill(t.advBody, { tool, d, fr, f: a.feed, dial: a.dial }) : t.advNoCnc;
+            const warn = a && (f < a.minF || f > a.maxF) ? fill(t.advWarnF, { v: f, fr }) : '';
+            document.getElementById('adv-warn').innerText = warn;
+            document.getElementById('adv-warn').classList.toggle('hidden', !warn);
+            document.getElementById('btn-adv-apply').classList.toggle('hidden', !a);
         }
 
         function updateGridHelper() {
@@ -2614,7 +2670,10 @@
                     if (parts[idx]) parts[idx].jobConfig.toolType = val;
                 });
                 updateJobUI();
+                applyAdvice();
             };
+            document.getElementById('btn-adv-apply').onclick = applyAdvice;
+            ['job-f', 'mill-d'].forEach(id => document.getElementById(id).addEventListener('input', renderAdvice));
 
             document.getElementById('mill-d').addEventListener('input', () => {
                 updateStepoverLimit();

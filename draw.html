@@ -431,6 +431,16 @@
                     <input type="hidden" id="target-width" value="100">
                 </section>
 
+                <!-- 雷射雕刻建議：依毛胚材質帶入功率與速度（只在雷射模式顯示） -->
+                <section id="mat-advice" class="hidden p-4 bg-red-50 dark:bg-red-950/20 rounded-xl border border-red-200 dark:border-red-500/20 space-y-2">
+                    <div class="flex justify-between items-center gap-2">
+                        <label id="mat-advice-title" class="text-[10px] font-black text-red-700 dark:text-red-400 tracking-widest"></label>
+                        <button id="btn-advice-apply" data-i18n="adviceApply" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline shrink-0"></button>
+                    </div>
+                    <label class="num-field"><span data-i18n="laserPower"></span><span class="num-wrap" data-unit="%"><input type="number" id="laser-pct" class="num-in" min="1" max="100" step="1"></span></label>
+                    <div id="mat-advice-body" class="text-[10px] text-slate-600 dark:text-slate-300 leading-relaxed"></div>
+                </section>
+
                 <!-- 工作走速 -->
                 <section>
                     <label id="i18n-label-feed" class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 none">工作走速 (F)</label>
@@ -486,11 +496,12 @@
         </div>
     </div>
 
-    <script src="gordix-table.js?v=6"></script>
-    <script src="gordix-workspace.js?v=6"></script>
-    <script src="gordix-import.js?v=6"></script>
-    <script src="gordix-regions.js?v=6"></script>
-    <script src="gordix-preview.js?v=6"></script>
+    <script src="gordix-table.js?v=7"></script>
+    <script src="gordix-workspace.js?v=7"></script>
+    <script src="gordix-import.js?v=7"></script>
+    <script src="gordix-regions.js?v=7"></script>
+    <script src="gordix-preview.js?v=7"></script>
+    <script src="gordix-materials.js?v=7"></script>
     <script>
         const i18n = {
             zh: {
@@ -537,6 +548,14 @@
                 legendRange: "加工範圍",
                 legendBoard: "板材",
                 labelStock: "毛胚",
+                adviceTitle: "雷射雕刻建議 · {m}",
+                adviceApply: "重新帶入",
+                laserPower: "雷射功率（外框與填滿的最大功率）",
+                adviceLine: "建議：功率 {p}%（S{s}）· 速度 F{f} · {n} 次 · 吹氣：{air}",
+                adviceNone: "這個材質沒有雷射雕刻的建議值，請先小範圍試雕。",
+                adviceS: "目前輸出：S{s}（0～255）",
+                adviceEdited: "目前與建議值不同（已手動調整）。",
+                adviceLink: "改材質請到毛胚設定。",
                 linkStock: "毛胚設定 →",
                 stockSize: "板材",
                 stockCenter: "置中",
@@ -644,6 +663,14 @@
                 legendRange: "Work range",
                 legendBoard: "Board",
                 labelStock: "Stock",
+                adviceTitle: "Laser engraving · {m}",
+                adviceApply: "Re-apply",
+                laserPower: "Laser power (max power for outlines and fills)",
+                adviceLine: "Suggested: power {p}% (S{s}) · speed F{f} · {n} pass(es) · air: {air}",
+                adviceNone: "No laser engraving data for this material. Test on a small area first.",
+                adviceS: "Current output: S{s} (0–255)",
+                adviceEdited: "Different from the suggestion (edited by hand).",
+                adviceLink: "Change the material in Stock setup.",
                 linkStock: "Stock setup →",
                 stockSize: "Board",
                 stockCenter: "centered",
@@ -828,6 +855,47 @@
                 toolBadge.className = "text-[9px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 font-bold uppercase";
             }
             offsetPreview.innerText = `Y-Offset: ${offset.toFixed(2)}mm`;
+            const laser = isLaserMode();
+            if (laser && laserModeWas !== true) applyLaserAdvice();
+            laserModeWas = laser;
+            renderMatAdvice();
+        }
+
+        // ===== 雷射雕刻建議（毛胚材質 → 功率、速度）=====
+        // 只在「進入雷射模式」時帶入一次；之後手動改的值保留，按「重新帶入」才會蓋回建議值
+        let laserModeWas = null;
+        const isLaserMode = () => !pen.on && (parseFloat(penDiamInput.value) || 0) === 0;
+        const laserAdviceNow = () => GordixMaterials.laserAdvice(board.material, 'engrave', board.t);
+
+        function applyLaserAdvice() {
+            const a = laserAdviceNow();
+            if (!a) return;
+            feedInput.value = a.speed;
+            maxSPowerInput.value = a.s;
+            updateDualSlider();
+            if (originalImage) { triggerLiveProcess(); updateStats(previewCanvas.width, previewCanvas.height); }
+        }
+
+        function renderMatAdvice() {
+            const d = i18n[currentLang];
+            const box = document.getElementById('mat-advice');
+            box.classList.toggle('hidden', !isLaserMode());
+            document.getElementById('mat-advice-title').innerText = d.adviceTitle.replace('{m}', GordixMaterials.name(board.material, currentLang));
+            const s = parseInt(maxSPowerInput.value, 10);
+            const pctEl = document.getElementById('laser-pct');
+            if (document.activeElement !== pctEl) pctEl.value = Math.round(s / 255 * 100);
+            const a = laserAdviceNow();
+            const lines = [];
+            if (a) {
+                lines.push(d.adviceLine.replace('{p}', a.pct).replace('{s}', a.s).replace('{f}', a.speed).replace('{n}', a.passes)
+                    .replace('{air}', currentLang === 'zh' ? a.row.airZh : a.row.airEn));
+                if (a.s !== s || a.speed !== parseFloat(feedInput.value)) lines.push(d.adviceEdited);
+            } else {
+                lines.push(d.adviceNone);
+            }
+            lines.push(d.adviceLink);
+            document.getElementById('mat-advice-body').innerText = `${d.adviceS.replace('{s}', s)}\n` + lines.join('\n');
+            document.getElementById('btn-advice-apply').classList.toggle('hidden', !a);
         }
 
         const container = document.getElementById('container');
@@ -957,7 +1025,7 @@
 
         lineWidthInput.oninput = () => { if (originalImage) triggerLiveProcess(); };
 
-        feedInput.oninput = () => { if (originalImage) updateStats(previewCanvas.width, previewCanvas.height); };
+        feedInput.oninput = () => { renderMatAdvice(); if (originalImage) updateStats(previewCanvas.width, previewCanvas.height); };
         fillAngleSelect.onchange = () => { if (originalImage) recomputeFillLines(); };
         fillSpacingInput.oninput = () => { if (originalImage) recomputeFillLines(); };
         
@@ -988,8 +1056,16 @@
 
         maxSPowerInput.oninput = () => {
             updateDualSlider();
+            renderMatAdvice();
             if (originalImage) triggerLiveProcess();
         };
+        document.getElementById('laser-pct').addEventListener('input', (e) => {
+            const pct = parseFloat(e.target.value);
+            if (!(pct > 0 && pct <= 100)) return;
+            maxSPowerInput.value = Math.round(pct / 100 * 255);
+            maxSPowerInput.oninput();
+        });
+        document.getElementById('btn-advice-apply').onclick = () => { applyLaserAdvice(); renderMatAdvice(); };
 
         grayscaleFillCheckbox.onchange = () => { 
             toggleGrayscalePowerUI();
@@ -1179,7 +1255,7 @@
             const d = i18n[currentLang];
             const t = tables[tableId], r = GordixTable.workRange(t);
             const boardLine = !board.on ? d.stockOff
-                : `${d.stockSize} ${board.mode === 'measure' ? d.stockMeasured : `${board.w} × ${board.h} · ${d.stockCenter}`} · ${board.t} mm`;
+                : `${d.stockSize} ${board.mode === 'measure' ? d.stockMeasured : `${board.w} × ${board.h} · ${d.stockCenter}`} · ${board.t} mm · ${GordixMaterials.name(board.material, currentLang)}`;
             document.getElementById('stock-summary').innerText =
                 `${d.tableName} ${tableId} · ${t.S} × ${t.W} mm
 ${d.legendRange} ${r.x * 2} × ${r.y * 2} mm
@@ -2627,6 +2703,8 @@ ${boardLine}`;
             
             const dPen = parseFloat(penDiamInput.value) || 0;
             const yOffset = (dPen === 0) ? 0 : (dPen / 2) - 12.6;
+            // 外框（恆定功率）：雷射用設定的最大功率（材質建議值），畫筆維持 S255
+            const outlineS = isLaserMode() ? Math.round(parseFloat(maxSPowerInput.value) || 255) : 255;
 
             // 物件中心用預覽同一個外框，G-code 位置才會和預覽一致
             const b = designBoxPx();
@@ -2705,7 +2783,7 @@ ${boardLine}`;
                     }
                 } else {
                     // 標準向量邊緣（恆定功率輸出）
-                    g.push("M03 S255");
+                    g.push(`M03 S${outlineS}`);
                     for (let i = 1; i < pts.length; i++) {
                         g.push(`G1 X${tx(pts[i].x * scale)} Y${ty(pts[i].y)}`);
                     }

@@ -205,7 +205,8 @@
         </footer>
     </div>
 
-    <script src="gordix-table.js?v=6"></script>
+    <script src="gordix-table.js?v=7"></script>
+    <script src="gordix-materials.js?v=7"></script>
     <script>
         // 設定全域變數，並以您指定的規格做為預設值
         let currentLang = 'zh';
@@ -330,7 +331,7 @@
 
             const b = GordixTable.loadBoard();
             const line = !b.on ? t.noBoard
-                : `${t.board} ${b.mode === 'measure' ? t.measured : `${b.w} × ${b.h} mm · ${t.centered}`} · ${t.thick} ${b.t} mm`;
+                : `${t.board} ${b.mode === 'measure' ? t.measured : `${b.w} × ${b.h} mm · ${t.centered}`} · ${t.thick} ${b.t} mm · ${GordixMaterials.name(b.material, currentLang)}`;
             $('step-2-desc').textContent = stockDone ? line : t.stockNewDesc;
             $('stock-summary').textContent = stockDone ? line : t.unset;
         }

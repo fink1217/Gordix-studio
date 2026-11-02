@@ -109,7 +109,8 @@ const GordixTable = (() => {
         { id: '2x4', w: 1220, h: 610 }
     ];
 
-    // 讀取毛胚設定 { on, mode, w, h, t, m, table }：
+    // 讀取毛胚設定 { on, mode, w, h, t, material, m, table }：
+    //   material 是 GordixMaterials 的材質 id，各工具據此帶入建議的加工參數。
     //   mode 'size' = 選尺寸、放在工作台正中央；'measure' = 用量測值三角定位。
     //   舊資料只有量測值、沒有 mode，視為 'measure'，量過的值不會遺失；沒存過時為 4×8、厚 18 mm 置中。
     //   table 是毛胚放在哪個工作台表格（不動 table.cfg 的 currentId，首頁才不會誤判成「未下載」）。
@@ -117,7 +118,7 @@ const GordixTable = (() => {
         let saved = null;
         try { saved = JSON.parse(localStorage.getItem(BOARD_KEY)); } catch (e) { }
         const board = Object.assign(
-            { on: true, mode: saved && saved.m ? 'measure' : 'size', w: 2440, h: 1220, t: 18, m: null, table: null },
+            { on: true, mode: saved && saved.m ? 'measure' : 'size', w: 2440, h: 1220, t: 18, material: 'plywood', m: null, table: null },
             saved || {});
         if (!board.m) board.m = defaultBoardMeasure(table || boardTable(board).table);
         return board;

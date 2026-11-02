@@ -25,6 +25,8 @@
     <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
     <!-- DXF 解析庫 -->
     <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.min.js"></script>
+    <script src="gordix-table.js?v=7"></script>
+    <script src="gordix-materials.js?v=7"></script>
 
     <style>
         body { background: #f8fafc; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; transition: background-color 0.2s, color 0.2s; }
@@ -197,6 +199,30 @@
                 <div id="job-panel" class="panel p-6 rounded-xl hidden shadow-2xl border-t-4 border-t-orange-600">
                     <h2 class="text-sm font-bold none text-orange-500 mb-6" data-i18n="jobSettings">第三步：加工參數設定</h2>
                     <div class="space-y-6">
+                        <!-- 建議參數：毛胚材質（步驟 2 選）＋ 這裡選的刀具 → 走速、每刀深度 -->
+                        <div id="cnc-advice" class="p-4 rounded-lg space-y-3 bg-orange-500/5 border border-orange-500/30">
+                            <div class="flex justify-between items-center gap-2">
+                                <h3 id="adv-title" class="text-[10px] font-bold text-orange-600 dark:text-orange-400"></h3>
+                                <a href="stock.html" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline shrink-0" data-i18n="advStock">毛胚設定 →</a>
+                            </div>
+                            <div id="adv-tool-row">
+                                <label class="block text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1" data-i18n="advTool">刀具</label>
+                                <select id="adv-tool"></select>
+                            </div>
+                            <div id="adv-custom" class="hidden grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1" data-i18n="advFlutes">刃數</label>
+                                    <select id="adv-flutes"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
+                                </div>
+                                <div>
+                                    <label class="block text-[10px] text-slate-500 dark:text-slate-400 font-bold mb-1" data-i18n="advType">刃形</label>
+                                    <select id="adv-type"></select>
+                                </div>
+                            </div>
+                            <div id="adv-body" class="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed whitespace-pre-line"></div>
+                            <div id="adv-warn" class="hidden text-[11px] font-bold text-amber-600 dark:text-amber-400 whitespace-pre-line"></div>
+                            <button id="btn-adv-apply" class="w-full py-2 rounded-lg text-xs font-bold bg-orange-500/15 text-orange-600 dark:text-orange-300 hover:bg-orange-500/25" data-i18n="advApply">帶入建議值</button>
+                        </div>
                         <div class="p-4 bg-slate-100 dark:bg-slate-950/50 rounded-lg space-y-4">
                             <h3 class="text-[10px] font-bold text-slate-500 dark:text-slate-400 none" data-i18n="groupSize">選中零件群組尺寸 (mm)</h3>
                             <div class="grid grid-cols-2 gap-4">
@@ -587,6 +613,16 @@
                 height: "高度",
                 resolution: "解析度",
                 feedRate: "進給速率",
+                advTitle: "建議參數 · {m} · {t} mm", advStock: "毛胚設定 →", advTool: "刀具", advCustom: "自訂（用下面的刀具直徑）",
+                advFlutes: "刃數", advType: "刃形", advDown: "下旋", advUp: "上旋", advStraight: "直刃", advApply: "帶入建議值",
+                advCnc: "建議：走速 F{fr} · 每刀 {dr} mm\n已帶入：F{f} · 每刀 {doc} mm\n修邊機刻度 {dial}（約 {rpm} RPM）",
+                advCap: "實測建議每刀 ≤ {cap} mm（參數指南 {d2}）",
+                advNoCnc: "這個材質沒有 CNC 建議值（例如紙、玻璃），請改用雷射，或到毛胚設定換材質。",
+                advLaser: "雷射切割建議：功率 {p}% · 速度 F{f} · {n} 次 · 吹氣：{air}\n這個工具固定全功率（S255）、每個路徑只跑 1 次；要 {n} 次請重複執行檔案。",
+                advLaserThick: "⚠ 表上只有 {tt} mm 的實測值，毛胚是 {t} mm，請先試切。",
+                advNoLaser: "這個材質沒有雷射切割建議值，請先小範圍試切。",
+                advWarnF: "⚠ 走速 F{v} 超出建議 F{f1}～{f2}", advWarnStep: "⚠ 每刀 {v} mm 超過建議上限 {max} mm",
+                advHint: "帶入後按「更新計算路徑」才會套用到選取的零件。",
                 mode: "加工模式",
                 optLaser: "雷射切割",
                 optAuto: "輪廓（自動判斷內外）",
@@ -638,6 +674,16 @@
                 height: "Height",
                 resolution: "Resolution",
                 feedRate: "Feed Rate (F)",
+                advTitle: "Suggested · {m} · {t} mm", advStock: "Stock setup →", advTool: "Bit", advCustom: "Custom (use the bit diameter below)",
+                advFlutes: "Flutes", advType: "Type", advDown: "Down-cut", advUp: "Up-cut", advStraight: "Straight", advApply: "Fill in suggested values",
+                advCnc: "Suggested: feed F{fr} · depth/pass {dr} mm\nFilled in: F{f} · {doc} mm per pass\nRouter dial {dial} (about {rpm} RPM)",
+                advCap: "Field-tested: ≤ {cap} mm per pass (guide {d2})",
+                advNoCnc: "No CNC data for this material (e.g. paper, glass). Use the laser, or change the material in Stock setup.",
+                advLaser: "Laser cut: power {p}% · speed F{f} · {n} pass(es) · air: {air}\nThis tool always uses full power (S255) and runs each path once; for {n} passes run the file again.",
+                advLaserThick: "⚠ Only {tt} mm was tested; the stock is {t} mm. Test-cut first.",
+                advNoLaser: "No laser cutting data for this material. Test on a small area first.",
+                advWarnF: "⚠ Feed F{v} is outside the suggested F{f1}–{f2}", advWarnStep: "⚠ {v} mm per pass exceeds the suggested max {max} mm",
+                advHint: "Press \"Update toolpath\" to apply them to the selected parts.",
                 mode: "Process Mode",
                 optLaser: "Laser Cutting",
                 optAuto: "Profile (auto inside/outside)",
@@ -676,6 +722,7 @@
                 if (i18n[currentLang][key]) el.innerHTML = i18n[currentLang][key];
             });
             renderPartList();
+            renderAdvice();
         }
 
         document.getElementById('lang-toggle').onclick = () => { 
@@ -1241,7 +1288,7 @@
                     originalDim: { w: pMaxX-pMinX, h: pMaxY-pMinY }, 
                     currentDim: { w: pMaxX-pMinX, h: pMaxY-pMinY }, 
                     visible: true, 
-                    jobConfig: { type: 'outer', f: 1000, d: 6.35, depth: 3.0, step: 1.0, overlap: 0.5, resolution: 0.1, useTab: false }, 
+                    jobConfig: Object.assign({ type: 'outer', depth: 3.0, overlap: 0.5, resolution: 0.1, useTab: false }, adviceDefaults()), 
                     toolpath: null, appliedMethod: null,
                     pocketContourPaths: null, pocketScanPaths: null
                 };
@@ -1692,6 +1739,7 @@
                 if (lastP.jobConfig.auto) document.getElementById('job-type').value = 'auto';
             } else { panel.classList.add('hidden'); hint.classList.remove('hidden'); }
             toggleMillingOptions();
+            renderAdvice();
         }
 
         document.getElementById('resize-w').oninput = (e) => {
@@ -1719,7 +1767,97 @@
             document.getElementById('pocket-opts').classList.toggle('hidden', val !== 'pocket');
             document.getElementById('tab-opts-container').classList.toggle('hidden', val !== 'outer' && val !== 'inner' && val !== 'auto');
         }
-        document.getElementById('job-type').onchange = toggleMillingOptions;
+        document.getElementById('job-type').onchange = () => { toggleMillingOptions(); renderAdvice(); };
+
+        // ===== 建議參數：毛胚材質 × 刀具 =====
+        // 刀具選擇存在瀏覽器（下次開啟沿用）；換刀具時重新帶入，手動改的值在換刀前都保留
+        const stock = GordixTable.loadBoard();
+        const TOOL_KEY = 'gordix-cnc-tool';
+        let advTool = (() => { try { return JSON.parse(localStorage.getItem(TOOL_KEY)) || {}; } catch (e) { return {}; } })();
+        const $v = id => document.getElementById(id);
+
+        // 目前刀具 { d, flutes, type }：預設刀具用表上的值，自訂用刀徑欄位
+        function currentTool() {
+            const p = GordixMaterials.CNC_TOOLS.find(t => t.id === advTool.id);
+            if (p) return p;
+            if (advTool.id === 'custom') return { d: parseFloat($v('mill-d').value) || 6.35, flutes: advTool.flutes || 2, type: advTool.type || 'downcut' };
+            return GordixMaterials.CNC_TOOLS[0];
+        }
+
+        // 新載入零件的預設值
+        function adviceDefaults() {
+            const tool = currentTool();
+            const a = GordixMaterials.cncAdvice(stock.material, tool);
+            return { d: tool.d, f: a ? a.feed : 1000, step: a ? a.doc : 1.0 };
+        }
+
+        function applyAdvice() {
+            if ($v('job-type').value === 'laser') {
+                const l = GordixMaterials.laserAdvice(stock.material, 'cut', stock.t);
+                if (l) $v('job-f').value = l.speed;
+            } else {
+                const tool = currentTool(), a = GordixMaterials.cncAdvice(stock.material, tool);
+                if (!a) return;
+                $v('mill-d').value = tool.d;
+                $v('job-f').value = a.feed;
+                $v('mill-step').value = a.doc;
+            }
+            $v('job-f').dispatchEvent(new Event('input'));
+            renderAdvice();
+        }
+
+        function renderAdvice() {
+            const d = i18n[currentLang];
+            const fill = (s, o) => Object.entries(o).reduce((r, [k, v]) => r.split(`{${k}}`).join(v), s);
+            $v('adv-title').innerText = fill(d.advTitle, { m: GordixMaterials.name(stock.material, currentLang), t: stock.t });
+            const tools = GordixMaterials.CNC_TOOLS.map(t => `<option value="${t.id}">${t[currentLang]}</option>`).join('');
+            $v('adv-tool').innerHTML = tools + `<option value="custom">${d.advCustom}</option>`;
+            $v('adv-tool').value = GordixMaterials.CNC_TOOLS.some(t => t.id === advTool.id) || advTool.id === 'custom' ? advTool.id : GordixMaterials.CNC_TOOLS[0].id;
+            $v('adv-type').innerHTML = [['downcut', d.advDown], ['upcut', d.advUp], ['straight', d.advStraight]].map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+            const tool = currentTool();
+            $v('adv-flutes').value = tool.flutes; $v('adv-type').value = tool.type;
+            const laser = $v('job-type').value === 'laser';
+            $v('adv-tool-row').classList.toggle('hidden', laser);
+            $v('adv-custom').classList.toggle('hidden', laser || advTool.id !== 'custom');
+
+            const body = [], warn = [];
+            const f = parseFloat($v('job-f').value), step = parseFloat($v('mill-step').value);
+            if (laser) {
+                const l = GordixMaterials.laserAdvice(stock.material, 'cut', stock.t);
+                if (l) {
+                    body.push(fill(d.advLaser, { p: l.pct, f: l.speed, n: l.passes, air: currentLang === 'zh' ? l.row.airZh : l.row.airEn }));
+                    if (l.thicknessOff) warn.push(fill(d.advLaserThick, { tt: l.row.t, t: stock.t }));
+                } else body.push(d.advNoLaser);
+                $v('btn-adv-apply').classList.toggle('hidden', !l);
+            } else {
+                const a = GordixMaterials.cncAdvice(stock.material, tool);
+                if (a) {
+                    const rng = (x, y) => x === y ? x : `${x}～${y}`;
+                    body.push(fill(d.advCnc, { fr: rng(a.minF, a.maxF), dr: rng(a.docMin.toFixed(1), a.docMax.toFixed(1)), f: a.feed, doc: a.doc.toFixed(1), dial: a.dial, rpm: a.rpm.toLocaleString() }));
+                    if (a.docCap && a.docCap < a.docMax) body.push(fill(d.advCap, { cap: a.docCap.toFixed(1), d2: a.docMax.toFixed(1) }));
+                    body.push(d.advHint);
+                    if (f < a.minF || f > a.maxF) warn.push(fill(d.advWarnF, { v: f, f1: a.minF, f2: a.maxF }));
+                    const maxStep = Math.min(a.docMax, a.docCap || Infinity);
+                    if (step > maxStep + 1e-9) warn.push(fill(d.advWarnStep, { v: step, max: maxStep.toFixed(1) }));
+                } else body.push(d.advNoCnc);
+                $v('btn-adv-apply').classList.toggle('hidden', !a);
+            }
+            $v('adv-body').innerText = body.join('\n');
+            $v('adv-warn').innerText = warn.join('\n');
+            $v('adv-warn').classList.toggle('hidden', !warn.length);
+        }
+
+        function saveTool() { try { localStorage.setItem(TOOL_KEY, JSON.stringify(advTool)); } catch (e) { } }
+        $v('adv-tool').onchange = (e) => {
+            const p = GordixMaterials.CNC_TOOLS.find(t => t.id === e.target.value);
+            advTool = p ? { id: p.id } : { id: 'custom', flutes: currentTool().flutes, type: currentTool().type };
+            saveTool();
+            applyAdvice();
+        };
+        $v('adv-flutes').onchange = (e) => { advTool.flutes = parseInt(e.target.value, 10); saveTool(); applyAdvice(); };
+        $v('adv-type').onchange = (e) => { advTool.type = e.target.value; saveTool(); applyAdvice(); };
+        $v('btn-adv-apply').onclick = applyAdvice;
+        ['job-f', 'mill-step', 'mill-d'].forEach(id => $v(id).addEventListener('input', renderAdvice));
 
         // 計算路徑與 Gcode 生成
         document.getElementById('apply-job-btn').onclick = () => {

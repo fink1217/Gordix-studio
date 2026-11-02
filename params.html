@@ -406,6 +406,8 @@
         </footer>
     </div>
 
+    <script src="gordix-table.js?v=7"></script>
+    <script src="gordix-materials.js?v=7"></script>
     <script>
         // --- 1. 語系資料定義 ---
         const i18nData = {
@@ -562,26 +564,8 @@
         };
 
         // --- 2. 雷射模組參數數據 (適用10W，最高速度限制在 F2000 以內) ---
-        const laserMatrixData = [
-            { matZh: '3mm MDF 密集板', matEn: '3mm MDF Board', typeZh: '精準切割', typeEn: 'Cutting', category: 'cut', power: '95%', speed: '200', passes: '3', airZh: '強烈建議開啟', airEn: 'Highly Rec.' },
-            { matZh: 'MDF 密集板', matEn: 'MDF Board', typeZh: '表面雕刻', typeEn: 'Engraving', category: 'engrave', power: '30%', speed: '1500', passes: '1', airZh: '建議關閉/低風量', airEn: 'Off/Low' },
-            { matZh: '3mm 椴木膠合板', matEn: '3mm Basswood Plywood', typeZh: '精準切割', typeEn: 'Cutting', category: 'cut', power: '90%', speed: '350', passes: '2', airZh: '強烈建議開啟', airEn: 'Highly Rec.' },
-            { matZh: '5mm 椴木膠合板', matEn: '5mm Basswood Plywood', typeZh: '精準切割', typeEn: 'Cutting', category: 'cut', power: '95%', speed: '150', passes: '3', airZh: '強烈建議開啟', airEn: 'Highly Rec.' },
-            { matZh: '椴木膠合板', matEn: 'Basswood Plywood', typeZh: '一般雕刻', typeEn: 'Engraving', category: 'engrave', power: '25%', speed: '1500', passes: '1', airZh: '建議關閉/低風量', airEn: 'Off/Low' },
-            { matZh: '3mm 櫻桃木實木', matEn: '3mm Cherry Solid Wood', typeZh: '精準切割', typeEn: 'Cutting', category: 'cut', power: '90%', speed: '240', passes: '2', airZh: '強烈建議開啟', airEn: 'Highly Rec.' },
-            { matZh: '櫻桃木/胡桃木實木', matEn: 'Cherry/Walnut Solid Wood', typeZh: '高對比雕刻', typeEn: 'Engraving', category: 'engrave', power: '35%', speed: '1200', passes: '1', airZh: '建議關閉', airEn: 'Off' },
-            { matZh: '3mm 壓克力(深色)', matEn: '3mm Dark Acrylic', typeZh: '精準切割', typeEn: 'Cutting', category: 'cut', power: '95%', speed: '250', passes: '2', airZh: '建議開啟', airEn: 'Recommended' },
-            { matZh: '壓克力(深色)', matEn: 'Dark Acrylic', typeZh: '磨砂雕刻', typeEn: 'Engraving', category: 'engrave', power: '20%', speed: '1600', passes: '1', airZh: '建議關閉', airEn: 'Off' },
-            { matZh: '瓦楞紙 / 快遞紙箱', matEn: 'Cardboard Box', typeZh: '輪廓切割', typeEn: 'Cutting', category: 'cut', power: '70%', speed: '800', passes: '1', airZh: '建議開啟', airEn: 'Recommended' },
-            { matZh: '黑卡紙 (250g)', matEn: 'Black Cardstock (250g)', typeZh: '高速切割', typeEn: 'Cutting', category: 'cut', power: '80%', speed: '1200', passes: '1', airZh: '建議開啟', airEn: 'Recommended' },
-            { matZh: '植鞣皮革', matEn: 'Vegetable Tanned Leather', typeZh: '輪廓切割', typeEn: 'Cutting', category: 'cut', power: '80%', speed: '600', passes: '1', airZh: '強烈建議開啟', airEn: 'Highly Rec.' },
-            { matZh: '植鞣皮革', matEn: 'Vegetable Tanned Leather', typeZh: '表面雕刻', typeEn: 'Engraving', category: 'engrave', power: '25%', speed: '1500', passes: '1', airZh: '建議關閉/低風量', airEn: 'Off/Low' },
-            { matZh: '不織布 / 毛氈 (2mm)', matEn: 'Felt (2mm)', typeZh: '高速切割', typeEn: 'Cutting', category: 'cut', power: '75%', speed: '700', passes: '1', airZh: '建議開啟', airEn: 'Recommended' },
-            { matZh: '陽極氧化鋁表面', matEn: 'Anodized Aluminum', typeZh: '表面打標', typeEn: 'Marking', category: 'engrave', power: '60%', speed: '1800', passes: '1', airZh: '無影響', airEn: 'N/A' },
-            { matZh: '304 不鏽鋼 (無鍍膜/需慢速)', matEn: '304 Stainless Steel (Bare)', typeZh: '高能雕刻/打標', typeEn: 'Marking', category: 'engrave', power: '95%', speed: '600', passes: '1', airZh: '無影響', airEn: 'N/A' },
-            { matZh: '岩板 / 深色石材', matEn: 'Slate / Dark Stone', typeZh: '高對比雕刻', typeEn: 'Engraving', category: 'engrave', power: '80%', speed: '1400', passes: '1', airZh: '無影響', airEn: 'N/A' },
-            { matZh: '平板玻璃 (需事先塗黑或貼貼紙)', matEn: 'Glass (Pre-treated Black)', typeZh: '磨砂打標', typeEn: 'Engraving', category: 'engrave', power: '90%', speed: '1000', passes: '1', airZh: '無影響', airEn: 'N/A' }
-        ];
+        // 雷射對照表資料在共用材料檔（各轉檔工具也讀同一份）
+        const laserMatrixData = GordixMaterials.LASER;
 
         // 狀態管理
         let currentLang = 'zh';
@@ -625,6 +609,9 @@
                 setLanguage(currentLang === 'zh' ? 'en' : 'zh');
             });
 
+            // 計算機預設用毛胚設定選的材質（該材質有 CNC 資料時）
+            const stockCnc = GordixMaterials.material(GordixTable.loadBoard().material).cnc;
+            if (stockCnc) document.getElementById('calc-material').value = stockCnc;
             updateLaserTable();
             onMaterialChange(); // 執行初始預設設定與計算
         });
@@ -827,16 +814,6 @@
             calculateParams();
         }
 
-        // 智慧速度進位器：提供高可讀性的速度整數區間
-        function roundFeed(val) {
-            if (val > 500) {
-                return Math.round(val / 100) * 100;
-            } else if (val > 100) {
-                return Math.round(val / 50) * 50;
-            } else {
-                return Math.round(val / 10) * 10;
-            }
-        }
 
         function calculateParams() {
             const material = document.getElementById('calc-material').value;
@@ -844,98 +821,9 @@
             
             document.getElementById('calc-diameter-val').innerText = `${diameter.toFixed(3)} mm`;
 
-            // 材料對照基準 (完全比照「常用材料加工對照表」標準)
-            // standardDiameter 為基準尺寸: 塑膠/鋁金屬預設以 3.175mm 為基準；木材類以 6.35mm 為基準
-            const matSpecs = {
-                softwood:     { baseMinF: 1200, baseMaxF: 1600, baseMinDoc: 3.0, baseMaxDoc: 4.0, rpm: 22000, stdD: 6.35, stdZ: 2 },
-                plywood:      { baseMinF: 1000, baseMaxF: 1200, baseMinDoc: 3.0, baseMaxDoc: 3.0, rpm: 20000, stdD: 6.35, stdZ: 2 },
-                hardwood:     { baseMinF: 800,  baseMaxF: 1000, baseMinDoc: 1.5, baseMaxDoc: 2.0, rpm: 18000, stdD: 6.35, stdZ: 2 },
-                toolingboard: { baseMinF: 1200, baseMaxF: 1500, baseMinDoc: 3.0, baseMaxDoc: 4.0, rpm: 18000, stdD: 6.35, stdZ: 2 },
-                acrylic:      { baseMinF: 800,  baseMaxF: 1000, baseMinDoc: 2.0, baseMaxDoc: 3.0, rpm: 16000, stdD: 3.175, stdZ: 1 },
-                doublecolor:  { baseMinF: 800,  baseMaxF: 1200, baseMinDoc: 0.5, baseMaxDoc: 1.0, rpm: 15000, stdD: 3.175, stdZ: 1 },
-                aluminum:     { baseMinF: 800,  baseMaxF: 1200, baseMinDoc: 0.1, baseMaxDoc: 0.3, rpm: 13500, stdD: 3.175, stdZ: 1 }
-            };
-
-            const spec = matSpecs[material] || matSpecs['softwood'];
-
-            // 刀徑與刃數比例調整因子 (相對於材料標準預設)
-            const dFactor = diameter / spec.stdD;
-            const zFactor = currentFlutes / spec.stdZ;
-
-            // 計算轉速 N
-            let calculatedRpm = spec.rpm;
-            
-            // Makita RT0700 防護與限制
-            let minRpmLimit = 15000; 
-            if (material === 'aluminum') {
-                minRpmLimit = 12000;
-            }
-
-            if (calculatedRpm > 30000) calculatedRpm = 30000;
-            if (calculatedRpm < minRpmLimit) calculatedRpm = minRpmLimit;
-
-            // 換算 Makita 撥盤
-            let dial = '1';
-            if (calculatedRpm < 11000) {
-                dial = '1';
-            } else if (calculatedRpm < 14500) {
-                dial = '2';
-            } else if (calculatedRpm < 19500) {
-                dial = '3';
-            } else if (calculatedRpm < 24500) {
-                dial = '4';
-            } else if (calculatedRpm < 28500) {
-                dial = '5';
-            } else {
-                dial = '6';
-            }
-
-            // 比照對照表計算動態進給範圍 (配合刀徑與刃數按比例做精確展幅)
-            let feedMin = spec.baseMinF * Math.pow(dFactor, 0.6) * (0.6 + 0.4 * zFactor);
-            let feedMax = spec.baseMaxF * Math.pow(dFactor, 0.6) * (0.6 + 0.4 * zFactor);
-
-            // 刃形進給微調
-            if (currentCutterType === 'straight') {
-                feedMin *= 0.9;
-                feedMax *= 0.9;
-            } else if (currentCutterType === 'upcut') {
-                feedMin *= 1.05;
-                feedMax *= 1.05;
-            }
-
-            // 限制：Gordix 機台走速上限 F2000
-            let isLimited = false;
-            if (feedMax > 2000) {
-                feedMax = 2000;
-                isLimited = true;
-            }
-            if (feedMin > 1900) feedMin = 1800;
-            if (feedMin < 100) feedMin = 100;
-            if (feedMax < 150) feedMax = 150;
-
-            // 比照對照表計算動態下刀深度 (DOC)
-            let docMin = spec.baseMinDoc * dFactor;
-            let docMax = spec.baseMaxDoc * dFactor;
-
-            // 刃形 DOC 微調
-            if (currentCutterType === 'straight') {
-                docMin *= 0.9;
-                docMax *= 0.9;
-            }
-
-            // 下刀量保護限制
-            if (material === 'aluminum') {
-                docMin = Math.max(0.1, Math.min(docMin, 0.2));
-                docMax = Math.max(0.1, Math.min(docMax, 0.3));
-            } else {
-                let maxDocCap = 4.0;
-                if (docMax > maxDocCap) docMax = maxDocCap;
-                if (docMin < 0.2) docMin = 0.2;
-            }
-
-            // 格式化輸出
-            const minF = roundFeed(feedMin);
-            const maxF = roundFeed(feedMax);
+            // 算法在共用材料檔（與各轉檔工具的建議值同一套）
+            const { dial, rpm: calculatedRpm, minF, maxF, docMin, docMax, isLimited } =
+                GordixMaterials.cncCalc(material, diameter, currentFlutes, currentCutterType);
 
             document.getElementById('out-dial').innerText = `${currentLang === 'zh' ? '刻度' : 'Dial'} ${dial}`;
             document.getElementById('out-rpm').innerText = `${Math.round(calculatedRpm).toLocaleString()} RPM`;
