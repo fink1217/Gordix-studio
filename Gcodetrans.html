@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>G-code Editor & Viewer</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="gordix-table.js?v=8"></script>
+    <script src="gordix-preview.js?v=8"></script>
+    <script src="gordix-sim.js?v=8"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
@@ -285,6 +288,25 @@
                             </p>
                         </div>
                     </div>
+
+                    <!-- 切削模擬與動畫：模擬「下載時會輸出的 G-code」 -->
+                    <div id="sim-panel" class="controls-card mt-4 space-y-3 hidden">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <label class="flex items-center gap-2 text-xs font-bold text-emerald-400 cursor-pointer">
+                                <input type="checkbox" id="simEnable" class="w-4 h-4 accent-emerald-500" checked>
+                                <span id="txt-sim-enable"></span>
+                            </label>
+                            <span id="simInfo" class="text-[10px] text-gray-400 font-mono"></span>
+                        </div>
+                        <div id="simTool" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10px] text-gray-400">
+                            <label class="space-y-1"><span id="txt-sim-tool"></span>
+                                <select id="simToolType" class="w-full"><option value="flat"></option><option value="ball"></option><option value="vbit"></option></select></label>
+                            <label class="space-y-1"><span id="txt-sim-d"></span><input type="number" id="simToolD" min="0.1" step="0.1" class="w-full"></label>
+                            <label class="space-y-1"><span id="txt-sim-a"></span><input type="number" id="simToolA" min="10" max="170" step="1" value="90" class="w-full"></label>
+                            <label class="space-y-1"><span id="txt-sim-thick"></span><input type="number" id="simThick" min="0.1" step="0.1" class="w-full"></label>
+                        </div>
+                        <div id="simBar"></div>
+                    </div>
                 </div>
 
                 <!-- 【右側控制面板】：進階選項、參考底圖 與 下載按鈕 -->
@@ -455,7 +477,12 @@
             unitSec: "秒",
             metricAlert: "Gcode已轉換為公制(G21)",
             legendPath: "加工路徑",
-            legendTab: "追加橋位"
+            legendTab: "追加橋位",
+            simEnable: "切削模擬（3D 顯示板材被切掉的樣子）",
+            simLaser: "雷射／畫筆檔不切板材，只播放動畫",
+            simTool: "刀具", simFlat: "平刀", simBall: "球刀", simVbit: "V 刀",
+            simD: "刀徑 (mm)", simA: "V 刀角度 (°)", simThick: "板厚 (mm)",
+            simInfo: "格子 {res} mm · 最深 {min} mm · 切穿 {thr} 格"
         },
         en: {
             headerTitle: "Gcode Adjuster",
@@ -494,7 +521,12 @@
             unitSec: "sec",
             metricAlert: "G-code converted to metric (G21)",
             legendPath: "Tool Path",
-            legendTab: "New Tabs"
+            legendTab: "New Tabs",
+            simEnable: "Cutting simulation (show the board being cut in 3D)",
+            simLaser: "Laser / pen files don't cut the board; animation only",
+            simTool: "Bit", simFlat: "Flat", simBall: "Ball nose", simVbit: "V-bit",
+            simD: "Diameter (mm)", simA: "V angle (°)", simThick: "Board thickness (mm)",
+            simInfo: "cell {res} mm · deepest {min} mm · {thr} cells cut through"
         }
     };
 
@@ -564,6 +596,14 @@
 
         document.getElementById('txt-legend-path').innerText = lang.legendPath;
         document.getElementById('txt-legend-tab').innerText = lang.legendTab;
+        document.getElementById('txt-sim-enable').innerText = document.getElementById('simEnable').disabled ? lang.simLaser : lang.simEnable;
+        document.getElementById('txt-sim-tool').innerText = lang.simTool;
+        document.getElementById('txt-sim-d').innerText = lang.simD;
+        document.getElementById('txt-sim-a').innerText = lang.simA;
+        document.getElementById('txt-sim-thick').innerText = lang.simThick;
+        const simOpts = document.getElementById('simToolType').options;
+        simOpts[0].text = lang.simFlat; simOpts[1].text = lang.simBall; simOpts[2].text = lang.simVbit;
+        if (simState.bar) simState.bar.setLang(currentLang);
 
         displayStats(lastTimeSec, lastDistance);
     }
@@ -773,6 +813,8 @@
     function setView2d(on) {
         view2d = on;
         if (gcodeGroup) gcodeGroup.scale.z = on ? 1e-6 : 1;
+        if (simState.group) simState.group.scale.z = on ? 1e-6 : 1;
+        if (simState.mesh) simState.mesh.base.visible = !on;
         placeCamera(camera.position.distanceTo(cameraTarget));
         const active = 'px-2.5 py-0.5 rounded-full text-[10px] font-black bg-emerald-600 text-white';
         const idle = 'px-2.5 py-0.5 rounded-full text-[10px] font-black text-gray-400 hover:text-white';
@@ -2434,7 +2476,92 @@
         displayStats(totalTime, totalDist);
         scene.add(gcodeGroup);
         document.getElementById('downloadBtn').disabled = false;
+        clearTimeout(simState.timer);
+        simState.timer = setTimeout(rebuildSim, 300);
     }
+
+    // ===== 切削模擬與動畫（共用 gordix-preview.js 的播放器、gordix-sim.js 的高度圖）=====
+    // 模擬的是「下載時會輸出的 G-code」。刀具讀檔頭「; Tool: flat D6.35 A90」，讀不到用 1/4" 平刀；板厚預設讀毛胚設定。
+    const simState = { p: null, player: null, bar: null, sim: null, mesh: null, head: null, group: null, timer: 0, want: null, busy: false, drawn: 0, toolKey: '' };
+    const $s = id => document.getElementById(id);
+
+    function simTool() {
+        return { type: $s('simToolType').value, d: parseFloat($s('simToolD').value) || 6.35, angle: parseFloat($s('simToolA').value) || 90 };
+    }
+
+    // 換檔時依檔頭預填刀具與板厚
+    function presetSimTool(text) {
+        const m = text.match(/Tool:\s*(flat|ball|vbit)\s+D([\d.]+)(?:\s+A([\d.]+))?/i);
+        $s('simToolType').value = m ? m[1].toLowerCase() : 'flat';
+        $s('simToolD').value = m ? m[2] : 6.35;   // 檔頭沒寫刀具時用最常見的 1/4" 刀
+        if (m && m[3]) $s('simToolA').value = m[3];
+        $s('simThick').value = GordixTable.loadBoard().t;
+    }
+
+    function rebuildSim() {
+        if (!originalGcode) return;
+        const text = generateGcode();
+        const p = GordixPreview.parse(text);
+        const cutting = !/^\s*M0?3\b/im.test(text);   // 有 M03 = 雷射或畫筆，不切板材
+        $s('simEnable').disabled = !cutting;
+        $s('simTool').classList.toggle('hidden', !cutting || !$s('simEnable').checked);
+        $s('txt-sim-enable').innerText = cutting ? i18n[currentLang].simEnable : i18n[currentLang].simLaser;
+
+        if (simState.group) {
+            scene.remove(simState.group);
+            simState.group.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+        }
+        const group = new THREE.Group();
+        group.scale.z = view2d ? 1e-6 : 1;
+        const tool = simTool();
+        // 刀具：刀尖在動作點上的圓柱
+        const head = new THREE.Mesh(new THREE.CylinderGeometry(tool.d / 2, tool.d / 2, 20, 20),
+            new THREE.MeshLambertMaterial({ color: 0xdc2626, transparent: true, opacity: 0.85 }));
+        head.rotation.x = Math.PI / 2;
+        group.add(head);
+        simState.sim = null; simState.mesh = null;
+        if (cutting && $s('simEnable').checked) {
+            simState.sim = GordixSim.create(p.moves, tool, parseFloat($s('simThick').value) || 18);
+            simState.mesh = GordixSim.Mesh(simState.sim, THREE);
+            simState.mesh.base.visible = !view2d;
+            group.add(simState.mesh.group);
+        }
+        if (gcodeGroup) gcodeGroup.traverse(o => { if (o.material) { o.material.transparent = !!simState.sim; o.material.opacity = simState.sim ? 0.25 : 1; } });
+        scene.add(group);
+        Object.assign(simState, { p, group, head, drawn: 0 });
+
+        simState.player = GordixPreview.Player(p).on(s => { simState.want = s; pumpSim(); });
+        simState.bar = GordixPreview.PlayerBar($s('simBar'), simState.player, currentLang);
+        $s('sim-panel').classList.remove('hidden');
+        simState.want = simState.player.state();
+        pumpSim();
+    }
+
+    // 依播放位置移動刀具、往前（或從頭）計算模擬；每個畫面最多算 12 ms，沒算完下個畫面繼續
+    function pumpSim() {
+        const s = simState.want, p = simState.p;
+        if (!s || !p) return;
+        const mv = p.moves, a = mv[s.n - 1] || { x: 0, y: 0, z: 5 }, b = mv[s.n];
+        const f = b ? s.frac : 0, q = b ? { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f, z: a.z + (b.z - a.z) * f } : a;
+        simState.head.position.set(q.x, q.y, q.z + 10);
+        const sim = simState.sim;
+        if (!sim) return;
+        const finished = GordixSim.advance(sim, s.n, s.frac, performance.now() + 12);
+        const now = performance.now();
+        if (finished || now - simState.drawn > 80) {
+            simState.mesh.update();
+            simState.drawn = now;
+            const st = GordixSim.stats(sim);
+            $s('simInfo').innerText = i18n[currentLang].simInfo.replace('{res}', st.res.toFixed(2)).replace('{min}', st.min.toFixed(2)).replace('{thr}', st.through);
+        }
+        if (!finished && !simState.busy) {
+            simState.busy = true;
+            requestAnimationFrame(() => { simState.busy = false; pumpSim(); });
+        }
+    }
+
+    $s('simEnable').addEventListener('change', rebuildSim);
+    ['simToolType', 'simToolD', 'simToolA', 'simThick'].forEach(id => $s(id).addEventListener('change', rebuildSim));
 
     function generateGcode() {
         const lines = originalGcode.split('\n');
@@ -2664,6 +2791,7 @@
             }
 
             originalGcode = rawText; 
+            presetSimTool(originalGcode);
 
             const initialPathData = parseGcode(originalGcode);
             const detectedDepth = detectOriginalDepth(initialPathData);

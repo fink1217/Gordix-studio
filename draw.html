@@ -346,6 +346,11 @@
                 </div>
                 <!-- G-code 進度：機器面板的百分比是行數比例；拉到同樣的百分比可以看畫到哪，並產生續畫檔 -->
                 <div id="progress-row" class="hidden mt-3 flex items-center gap-3">
+                    <!-- 動畫：依進給速度播放，滑桿跟著走 -->
+                    <button id="btn-play" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-600 hover:bg-emerald-500 text-white whitespace-nowrap min-w-[64px]"></button>
+                    <select id="play-speed" class="px-1 py-1 rounded text-[10px] font-bold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                        <option value="1">1×</option><option value="10">10×</option><option value="100" selected>100×</option><option value="1000">1000×</option>
+                    </select>
                     <input type="range" id="progress-slider" min="0" max="1000" value="1000" class="flex-1 h-1.5 bg-slate-300 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer">
                     <span id="progress-text" class="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 whitespace-nowrap">進度 100.0%</span>
                     <button id="btn-resume" data-i18n="btnResume" class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-orange-500 hover:bg-orange-400 text-white whitespace-nowrap">從這裡產生續畫檔</button>
@@ -496,12 +501,12 @@
         </div>
     </div>
 
-    <script src="gordix-table.js?v=7"></script>
-    <script src="gordix-workspace.js?v=7"></script>
-    <script src="gordix-import.js?v=7"></script>
-    <script src="gordix-regions.js?v=7"></script>
-    <script src="gordix-preview.js?v=7"></script>
-    <script src="gordix-materials.js?v=7"></script>
+    <script src="gordix-table.js?v=8"></script>
+    <script src="gordix-workspace.js?v=8"></script>
+    <script src="gordix-import.js?v=8"></script>
+    <script src="gordix-regions.js?v=8"></script>
+    <script src="gordix-preview.js?v=8"></script>
+    <script src="gordix-materials.js?v=8"></script>
     <script>
         const i18n = {
             zh: {
@@ -596,6 +601,7 @@
                 moveTo: "移到圖層：",
                 newLayer: "＋ 新圖層",
                 progressIdle: "進度 {p}",
+                btnPlay: "▶ 播放", btnPause: "❚❚ 暫停",
                 progressText: "進度 {p}　第 {k} / {n} 筆",
                 btnResume: "從這裡產生續畫檔",
                 resumeTip: "機器面板的進度是行數百分比：拉到面板上的百分比，下載續畫檔放進 SD 卡。會從那一筆的開頭重畫。",
@@ -711,6 +717,7 @@
                 moveTo: "Move to layer:",
                 newLayer: "+ New layer",
                 progressIdle: "Progress {p}",
+                btnPlay: "▶ Play", btnPause: "❚❚ Pause",
                 progressText: "{p} · stroke {k} / {n}",
                 btnResume: "Resume file from here",
                 resumeTip: "The machine panel shows progress by line count: set the same percentage, then put the resume file on the SD card. The stroke in progress is redrawn from its start.",
@@ -808,6 +815,7 @@
             renderLayerPanel();
             closeRegionMenu();
             document.getElementById('btn-resume').title = data.resumeTip;
+            renderPlayButton(!!(drawPlayer && drawPlayer.state().playing));
             updateProgress();
             renderPenPanel();
             renderAdvancedState();
@@ -2912,9 +2920,46 @@ ${boardLine}`;
         document.getElementById('view-3d').onclick = () => setView3d(true);
 
         progressSlider.addEventListener('input', () => {
+            if (drawPlayer) drawPlayer.pause();
             if (gcodeViewActive() && !gcodeView) refreshGcodeView();
             else updateProgress();
         });
+
+        // ===== 動畫播放：依進給換算時間（共用 GordixPreview.Player），每 0.1 秒更新一次畫面 =====
+        // 從滑桿目前位置開始；滑桿在 100% 時從頭播。路徑改了（gcodeView 換新）就重建播放器。
+        let drawPlayer = null, drawPlayerView = null, drawFrameAt = 0;
+        const btnPlay = document.getElementById('btn-play'), playSpeed = document.getElementById('play-speed');
+
+        function ensureDrawPlayer() {
+            if (progressSlider.value >= 1000) progressSlider.value = 0;
+            if (!gcodeView) refreshGcodeView();
+            if (!gcodeView) return null;
+            if (drawPlayerView !== gcodeView) {
+                drawPlayer = GordixPreview.Player(gcodeView).on(onDrawFrame);
+                drawPlayer.setSpeed(parseFloat(playSpeed.value));
+                drawPlayerView = gcodeView;
+                drawPlayer.seekFrac(progressSlider.value / 1000);
+            }
+            return drawPlayer;
+        }
+
+        function onDrawFrame(s) {
+            renderPlayButton(s.playing);
+            const now = performance.now();
+            if (s.playing && now - drawFrameAt < 100) return;
+            drawFrameAt = now;
+            if (drawPlayerView !== gcodeView) return;   // 播放中路徑被改了
+            progressSlider.value = s.n >= gcodeView.moves.length ? 1000 : Math.min(999, Math.round(s.lineFrac * 1000));
+            updateProgress();
+            if (view3dOn) gcode3d.setProgress(s.n, s.frac);
+        }
+
+        function renderPlayButton(playing) {
+            btnPlay.innerText = i18n[currentLang][playing ? 'btnPause' : 'btnPlay'];
+        }
+
+        btnPlay.onclick = () => { const pl = ensureDrawPlayer(); if (pl) pl.toggle(); };
+        playSpeed.onchange = () => { if (drawPlayer) drawPlayer.setSpeed(parseFloat(playSpeed.value)); };
 
         // 續畫檔：用目前設定重新產生的 G-code（與下載的一致），短英文檔名（機器讀不到長的中文檔名）
         document.getElementById('btn-resume').onclick = () => {

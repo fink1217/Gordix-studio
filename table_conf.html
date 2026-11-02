@@ -377,6 +377,27 @@
                         </div>
                     </div>
                     
+                    <!-- 鬆緊修正：機器放出的皮帶比實際長，table.cfg 的四邊要扣掉；上面填捲尺實際量到的值 -->
+                    <div class="mt-4 grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-3 items-start">
+                        <div class="flex flex-col gap-1">
+                            <span id="label-c" class="text-[10px] text-muted-custom font-bold ml-1 uppercase"></span>
+                            <div class="input-card">
+                                <span class="tag-label">C</span>
+                                <input type="number" id="valC" min="0" max="100" step="0.5" class="uniform-input" oninput="updateCurrentTableData(false)">
+                                <span class="unit-label">mm</span>
+                            </div>
+                        </div>
+                        <div class="text-[11px] text-muted-custom space-y-1">
+                            <p id="c-desc"></p>
+                            <p id="c-out" class="font-mono text-title"></p>
+                            <div class="flex flex-wrap items-center gap-2">
+                                <button id="c-apply" onclick="applySlack()" class="btn-custom-secondary border px-3 py-1 rounded-lg text-xs font-bold"></button>
+                                <span id="c-warn" class="text-amber-500 font-bold"></span>
+                            </div>
+                        </div>
+                    </div>
+                    <p id="limit-warn" class="hidden mt-3 text-[11px] font-bold text-red-500"></p>
+
                     <!-- 尺寸比例校正：畫一個已知尺寸的框、量實際尺寸，自動算出比例 X / Y -->
                     <div class="mt-6 pt-4 border-t border-slate-700/50">
                         <div class="flex flex-wrap items-center justify-between gap-2">
@@ -465,7 +486,7 @@
         </div>
     </div>
 
-    <script src="gordix-table.js?v=7"></script>
+    <script src="gordix-table.js?v=8"></script>
     <script>
         const canvas = document.getElementById('tableCanvas');
         const ctx = canvas.getContext('2d');
@@ -489,6 +510,12 @@
                 sideW: "側邊W",
                 sideE: "側邊E",
                 sideD: "對角D",
+                sideC: "鬆緊修正",
+                cDesc: "機器放出的皮帶比實際需要長一點，table.cfg 的四邊要扣掉這段長度。上面五格請填捲尺實際量到的值，下載時自動扣除，對角線 D 依同樣的角度重算（不會歪）。",
+                cOut: "寫進 table.cfg：N {N} · S {S} · W {W} · E {E} · D {D}",
+                cApply: "套用樣機實測值 {v} mm",
+                cWarn: "⚠ 如果你之前已經手動把四邊各減過，請先改回捲尺量到的值，否則會重複扣。",
+                limitWarn: "⚠ 已達機器上限：寫進 table.cfg 的四邊最多 2600 mm、對角線最多 2990 mm（扣除鬆緊修正後）。超過的值已自動限制，實際尺寸若更大，換算會不準，請確認治具位置或洽原廠。",
                 advancedOff: "進階",
                 advancedOn: "進階 ✓",
                 calTitle: "尺寸比例校正",
@@ -530,6 +557,12 @@
                 sideW: "Side W",
                 sideE: "Side E",
                 sideD: "Diagonal D",
+                sideC: "Slack correction",
+                cDesc: "The machine pays out a bit more belt than needed, so the sides in table.cfg must be reduced by that length. Enter the actual tape measurements above; the correction is subtracted on download and D is recomputed at the same angle (no skew).",
+                cOut: "Written to table.cfg: N {N} · S {S} · W {W} · E {E} · D {D}",
+                cApply: "Use the measured value {v} mm",
+                cWarn: "⚠ If you already reduced the sides by hand, change them back to the tape measurements first, or it will be subtracted twice.",
+                limitWarn: "⚠ At the machine limit: sides in table.cfg can be at most 2600 mm and the diagonal 2990 mm (after slack correction). Larger values were limited; if the real size is bigger the conversion will be off. Check the jig positions or ask the manufacturer.",
                 advancedOff: "Advanced",
                 advancedOn: "Advanced ✓",
                 calTitle: "Size Scale Calibration",
@@ -615,6 +648,11 @@
             document.getElementById('label-w').innerText = t.sideW;
             document.getElementById('label-e').innerText = t.sideE;
             document.getElementById('label-d').innerText = t.sideD;
+            document.getElementById('label-c').innerText = t.sideC;
+            document.getElementById('c-desc').innerText = t.cDesc;
+            document.getElementById('c-warn').innerText = t.cWarn;
+            document.getElementById('limit-warn').innerText = t.limitWarn;
+            renderSlack();
             document.getElementById('legend-center').innerText = t.legendCenter;
             document.getElementById('legend-front').innerText = t.legendFront;
             document.getElementById('legend-facing').innerText = t.legendFacing;
@@ -787,7 +825,8 @@
             document.getElementById('valD').value = data.D;
             document.getElementById('valX').value = data.X;
             document.getElementById('valY').value = data.Y;
-            renderTableList();
+            document.getElementById('valC').value = data.C || 0;
+            updateCurrentTableData(false);   // 更新上限提示與鬆緊修正的輸出值
             draw();
             renderAdvancedState();
             GordixTable.save(allTables, currentTableId);
@@ -805,13 +844,17 @@
             let wVal = parseFloat(wInput.value) || 0;
             let eVal = parseFloat(eInput.value) || 0;
             let dVal = parseFloat(dInput.value) || 0;
+            const cVal = Math.max(0, parseFloat(document.getElementById('valC').value) || 0);
 
-            // 即時上限值檢查
-            if (nVal > 2600) { nVal = 2600; nInput.value = 2600; }
-            if (sVal > 2600) { sVal = 2600; sInput.value = 2600; }
-            if (wVal > 2600) { wVal = 2600; wInput.value = 2600; }
-            if (eVal > 2600) { eVal = 2600; eInput.value = 2600; }
-            if (dVal > 2990) { dVal = 2990; dInput.value = 2990; }
+            // 機器上限是寫進 table.cfg 的值（扣除鬆緊修正後）：四邊 2600、對角線 2990（對角線約多扣 1.5 倍）
+            const sideMax = 2600 + cVal, dMax = 2990 + cVal * 1.5;
+            const cap = (v, max, input) => { if (v > max) { input.value = max; return max; } return v; };
+            nVal = cap(nVal, sideMax, nInput); sVal = cap(sVal, sideMax, sInput);
+            wVal = cap(wVal, sideMax, wInput); eVal = cap(eVal, sideMax, eInput);
+            dVal = cap(dVal, dMax, dInput);
+            // 停在上限就一直提示（被限制過的值看起來和正常值一樣，不提示就會默默算錯）
+            const atLimit = [nVal, sVal, wVal, eVal].some(v => v >= sideMax) || dVal >= dMax;
+            document.getElementById('limit-warn').classList.toggle('hidden', !atLimit);
 
             // 失焦或強制補正下限值 (最小 600)
             if (forceMin) {
@@ -828,11 +871,13 @@
                 E: eVal,
                 D: dVal,
                 X: parseFloat(document.getElementById('valX').value) || 0,
-                Y: parseFloat(document.getElementById('valY').value) || 0
+                Y: parseFloat(document.getElementById('valY').value) || 0,
+                C: cVal
             };
             renderTableList();
             draw();
             renderCal();
+            renderSlack();
             GordixTable.save(allTables, currentTableId);
         }
 
@@ -860,6 +905,11 @@
 
                         if (allTables[id]) allTables[id][key] = val;
                     }
+                });
+                // table.cfg 裡是扣過鬆緊修正的值，加回來才是捲尺量到的值
+                Object.keys(allTables).forEach(id => {
+                    const c = allTables[id].C || 0;
+                    if (c) allTables[id] = Object.assign(GordixTable.shrinkTable(allTables[id], -c), { C: c });
                 });
                 switchTable(currentTableId);
                 event.target.value = ''; 
@@ -1094,20 +1144,28 @@
             ctx.restore();
         }
 
+        // 鬆緊修正：顯示實際寫進 table.cfg 的值
+        function renderSlack() {
+            const t = i18n[currentLang], d = allTables[currentTableId];
+            const v = GordixTable.cfgValues(d);
+            document.getElementById('c-out').innerText = t.cOut.replace('{N}', v.N).replace('{S}', v.S).replace('{W}', v.W).replace('{E}', v.E).replace('{D}', v.D);
+            document.getElementById('c-apply').innerText = t.cApply.replace('{v}', GordixTable.SLACK_MEASURED);
+            document.getElementById('c-apply').classList.toggle('hidden', (d.C || 0) === GordixTable.SLACK_MEASURED);
+        }
+
+        function applySlack() {
+            document.getElementById('valC').value = GordixTable.SLACK_MEASURED;
+            updateCurrentTableData(false);
+        }
+
         function downloadAll() {
-            // 下載前進行最後的限制掃描與修正，確保輸出文件合規
-            for (let i = 1; i <= 5; i++) {
-                const d = allTables[i];
-                if (d.E < 600) d.E = 600; if (d.E > 2600) d.E = 2600;
-                if (d.S < 600) d.S = 600; if (d.S > 2600) d.S = 2600;
-                if (d.W < 600) d.W = 600; if (d.W > 2600) d.W = 2600;
-                if (d.N < 600) d.N = 600; if (d.N > 2600) d.N = 2600;
-                if (d.D > 2990) d.D = 2990;
-            }
-            
+            // 寫進檔案的是扣除鬆緊修正後的值，再做機器上限檢查（四邊 600~2600、對角線 ≤ 2990）
+            const lim = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
             let out = "";
             for (let i = 1; i <= 5; i++) {
-                const d = allTables[i];
+                const d = GordixTable.cfgValues(allTables[i]);
+                ['E', 'S', 'W', 'N'].forEach(k => { d[k] = lim(d[k], 600, 2600); });
+                d.D = Math.min(d.D, 2990);
                 out += `TABLE${i}E ${d.E}\nTABLE${i}S ${d.S}\nTABLE${i}W ${d.W}\nTABLE${i}N ${d.N}\nTABLE${i}D ${d.D}\nTABLE${i}X ${d.X.toFixed(4)}\nTABLE${i}Y ${d.Y.toFixed(4)}\n\n`;
             }
             const blob = new Blob([out], { type: 'text/plain' });

@@ -39,6 +39,23 @@ const GordixTable = (() => {
         } catch (e) { /* 無痕模式等無法儲存的情況，下次開啟會回到預設值 */ }
     }
 
+    // 鬆緊修正：機器放出的皮帶比實際需要長 C mm（樣機實測約 17 mm），所以 table.cfg 的四邊要各扣 C。
+    // 對角線 D 依 SW 角（S 邊與 W 邊的夾角）不變重算，否則換算出的工作台會歪 1~2.5°。
+    // 網頁裡存的是捲尺實際量到的值（C 另外存）；c 為負數 = 反過來由 table.cfg 的值還原量測值。
+    const SLACK_MEASURED = 17;
+    function shrinkTable(d, c) {
+        if (!c) return Object.assign({}, d);
+        const r1 = v => Math.round(v * 10) / 10;
+        const cosT = Math.max(-1, Math.min(1, (d.W * d.W + d.S * d.S - d.D * d.D) / (2 * d.W * d.S || 1)));
+        const S = d.S - c, W = d.W - c;
+        return Object.assign({}, d, {
+            E: r1(d.E - c), S: r1(S), W: r1(W), N: r1(d.N - c),
+            D: r1(Math.sqrt(S * S + W * W - 2 * S * W * cosT))
+        });
+    }
+    // 寫進 table.cfg 的值（已扣鬆緊修正）
+    const cfgValues = d => shrinkTable(d, d.C || 0);
+
     // 機器可到達的加工座標範圍 (±x, ±y)，X 沿 S/N 邊，Y 沿 W/E 邊
     function workRange(d) {
         const tan15 = Math.tan(15 * Math.PI / 180);
@@ -186,7 +203,7 @@ const GordixTable = (() => {
     }
 
     return {
-        DEFAULTS, load, save, markConfigured, workRange, corners, locate,
+        DEFAULTS, load, save, markConfigured, workRange, corners, locate, SLACK_MEASURED, shrinkTable, cfgValues,
         BOARD_CORNERS, BOARD_SIZES, defaultBoardMeasure, loadBoard, saveBoard, hasBoard, boardTable,
         boardCorners, boardPolygon, boardShape, boardMid, insidePolygon
     };
