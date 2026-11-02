@@ -356,8 +356,8 @@ const GordixCam = (() => {
     function cuttingOrder(units) {
         const stage = { pocket: 0, inner: 1, outer: 2 };
         return units
-            .map(u => ({ u, laser: u.type === 'laser', r: u.farRadius }))
-            .sort((a, b) => (b.laser - a.laser) || (a.r - b.r)
+            .map(u => ({ u, laser: u.type === 'laser', mark: u.operation === 'laserLine', r: u.farRadius }))
+            .sort((a, b) => (b.mark - a.mark) || (b.laser - a.laser) || (a.r - b.r)
                 || ((b.u.nestingDepth || 0) - (a.u.nestingDepth || 0))
                 || ((stage[a.u.type] ?? 9) - (stage[b.u.type] ?? 9)))
             .map(k => k.u);
@@ -369,7 +369,7 @@ const GordixCam = (() => {
         const mv = [];
         units.forEach(u => {
             const cfg = u.cfg, isLaser = u.type === 'laser';
-            const passes = (isLaser || u.type === 'path3d') ? 1 : Math.ceil(cfg.depth / cfg.step);
+            const passes = isLaser ? (cfg.laserPasses || 1) : u.type === 'path3d' ? 1 : Math.ceil(cfg.depth / cfg.step);
             let lastPointOfPart = null;
             u.phases.forEach(phase => {
                 if (!phase.paths.length) return;
@@ -389,10 +389,10 @@ const GordixCam = (() => {
 
                         // 同一單元的下一層從同一點開始時不抬刀；挖槽掃描線、雕刻筆劃在 linkDist 內直接連過去
                         let needRetract = true;
-                        if (i > 1 && pathIdx === 0 && lastPointOfPart) needRetract = dist(start, lastPointOfPart) >= 0.5;
-                        else if (lastPtInLayer && dist(start, lastPtInLayer) <= phase.linkDist) needRetract = false;
+                        if (!isLaser && i > 1 && pathIdx === 0 && lastPointOfPart) needRetract = dist(start, lastPointOfPart) >= 0.5;
+                        else if (!isLaser && lastPtInLayer && dist(start, lastPtInLayer) <= phase.linkDist) needRetract = false;
 
-                        const down = isLaser ? { m: 'M03 S255' } : { g: 1, z: startZ, f: 300 };
+                        const down = isLaser ? { m: 'M03 S' + (cfg.laserPower ?? 255) } : { g: 1, z: startZ, f: 300 };
                         if (needRetract) {
                             if (!isLaser) mv.push({ g: 0, z: safeZ });
                             mv.push({ g: 0, x: start.x, y: start.y }, down);
@@ -465,7 +465,8 @@ const GordixCam = (() => {
         engrave: { head: 'router' },              // 沿線雕刻
         vcarve: { head: 'router' },
         relief: { head: 'router' },               // 灰階浮雕
-        laser: { head: 'laser', cut: true },      // 雷射切割
+        laser: { head: 'laser', cut: true },
+        laserLine: { head: 'laser', cut: false },      // 雷射切割
         drillMark: { head: 'mark' }               // 只標孔位（放樣檔）
     };
 
@@ -494,16 +495,32 @@ const GordixCam = (() => {
     const layerDepth = (job, layer) => layer.through ? job.thickness + job.overcut : layer.depth;
     const fileKey = layer => OPS[layer.op].head === 'router' ? 'router:' + layer.toolId : OPS[layer.op].head;
 
+    /** 雷射畫線移除僅供舊輪廓加工使用的補閉合點，原本封閉圖形照常封閉。 */
+    function objectPath(object, operation) {
+        const points=object.points;
+        if (operation!=='laserLine' || object.closed!==false || points.length<3) return points;
+        const a=points[0],b=points[points.length-1];
+        return a.x===b.x && a.y===b.y ? points.slice(0,-1) : points;
+    }
+
     // 一個圖層的物件 → 加工單元
     function layerUnits(job, layer, tool, objs, nest) {
+        const laser=OPS[layer.op].head==='laser';
+        const pct=Number.isFinite(layer.laserPct) ? Math.max(0,Math.min(100,layer.laserPct)) : 100;
         const base = {
             d: tool ? tool.d : 0, depth: layerDepth(job, layer), step: tool ? tool.step : 1,
-            f: tool ? tool.f : (layer.feed || 1000), useTab: !!(layer.through && layer.tabs),
+            f: laser ? (layer.feed || 1000) : tool ? tool.f : (layer.feed || 1000),
+            laserPower: Math.round(pct*255/100), laserPasses: Math.max(1,Math.min(100,Math.floor(layer.laserPasses || 1))), useTab: !!(layer.through && layer.tabs),
             resolution: job.resolution, overlap: (tool && tool.overlap) || 0.5
         };
         const unit = (type, objectIds, nestingDepth, phases) =>
-            makeUnit({ type, cfg: { ...base, type }, layerId: layer.id, objectIds, nestingDepth, through: !!layer.through, phases });
+            makeUnit({ type, operation: layer.op, cfg: { ...base, type }, layerId: layer.id, objectIds, nestingDepth, through: !!layer.through, phases });
 
+        if (layer.op==='laserLine') {
+            return objs.map(o=>unit('laser',[o.id],0,[{
+                paths:[cleanPath(objectPath(o,'laserLine'),job.resolution)],isContour:false,linkDist:-1
+            }]));
+        }
         if (layer.op === 'profile' || layer.op === 'outer' || layer.op === 'inner' || layer.op === 'laser') {
             return objs.map(o => {
                 const type = layer.op === 'profile' ? (nest.get(o.id) % 2 === 1 ? 'inner' : 'outer') : layer.op;
@@ -580,6 +597,11 @@ const GordixCam = (() => {
                 'Order: center outward');
         } else if (f.head === 'laser') {
             c.push('Tool: laser module', 'Before start: mount laser module, set Z0, wear laser safety glasses');
+            const seen=new Set();
+            f.units.forEach(u=>{if (!seen.has(u.layerId)) {
+                seen.add(u.layerId);
+                c.push(`Laser layer ${u.layerId}: S${u.cfg.laserPower} F${u.cfg.f} passes ${u.cfg.laserPasses}`);
+            }});
         } else {
             c.push('Tool: laser or pen (layout marks)');
         }
@@ -697,7 +719,7 @@ const GordixCam = (() => {
 
     return {
         layoutFile, digitStrokes,
-        TOOLS, OPS, profilePaths, pocketPaths, isInsideOther, isPointInPolygon, boundsOf,
+        TOOLS, OPS, objectPath, profilePaths, pocketPaths, isInsideOther, isPointInPolygon, boundsOf,
         makeUnit, cuttingOrder, planMoves, toGcode, estimateSeconds,
         cutNesting, layerDepth, buildUnits, buildFiles, toolLabel
     };

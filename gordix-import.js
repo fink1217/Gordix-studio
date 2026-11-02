@@ -429,7 +429,7 @@ const GordixImport = (() => {
         }));
 
         const curW = maxX - minX;
-        const scale = targetW / curW;
+        const scale = targetW / (curW || maxY - minY || 1);
         const offsetX = -minX * scale;
         const offsetY = -minY * scale;
 
@@ -523,8 +523,9 @@ const GordixImport = (() => {
         return vectorPaths.map(p => {
             const points = p.points.map(pt => ({ x: pt.x - gCx, y: pt.y - gCy }));
             const first = points[0], last = points[points.length - 1];
+            const closed = p.closed !== undefined ? p.closed : Math.hypot(first.x-last.x, first.y-last.y)<1e-6;
             if (points.length > 2 && (first.x !== last.x || first.y !== last.y)) points.push({ ...first });
-            return { points, layer: p.layer || 'Default', color: p.color || null };
+            return { points, closed, layer: p.layer || 'Default', color: p.color || null };
         });
     }
 
@@ -538,7 +539,7 @@ const GordixImport = (() => {
     // 讀點陣圖。opts：{ targetW, smooth, threshold }；回傳 Promise<{ paths, canvas }>
     async function loadBitmap(dataUrl, opts) {
         const r = await parseBitmap(dataUrl, opts.targetW, opts.smooth, opts.threshold);
-        return { paths: centerAndClose(r.paths.map(points => ({ points, layer: 'Bitmap' }))), canvas: r.canvas };
+        return { paths: centerAndClose(r.paths.map(points => ({ points, closed: true, layer: 'Bitmap' }))), canvas: r.canvas };
     }
 
     // 分組依據：有兩個以上具名圖層時用圖層名；否則有兩種以上顏色時用顏色；都沒有就全部一組

@@ -217,3 +217,59 @@ body[data-studio-page="index"] .step-card-active > a:not(.tool-choice) {
 }
 /* 進階模式開啟時仍保留清楚的選取狀態。 */
 .studio-header #advanced-toggle[class~="bg-white"] { background: #edf1f2; color: #202629; border-color: #edf1f2; }
+/* 桌面加工工作區鎖定在視窗內；捲動只發生在左右功能欄。 */
+@media (min-width: 1024px) {
+    body[data-preview-layout="fixed"] {
+        padding: 16px;
+        height: 100dvh;
+        min-height: 0;
+        overflow: hidden;
+    }
+    body[data-preview-layout="fixed"] .studio-shell {
+        display: flex;
+        flex-direction: column;
+        height: calc(100dvh - 32px);
+        min-height: 0;
+    }
+    body[data-preview-layout="fixed"] :is(.studio-header,.studio-workflow) { flex-shrink: 0; }
+    body[data-preview-layout="fixed"] .studio-workbench {
+        flex: 1;
+        min-height: 0;
+        grid-template-rows: minmax(0,1fr);
+        align-items: stretch;
+    }
+    body[data-studio-page="CNC"] .studio-workbench { grid-template-columns: 260px minmax(0,1fr) 300px; }
+    body[data-preview-layout="fixed"] .studio-sidebar {
+        height: 100%;
+        min-height: 0;
+        max-height: none;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        scrollbar-gutter: stable;
+        padding-right: 12px;
+    }
+    body[data-preview-layout="fixed"] .studio-center {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 0;
+        min-width: 0;
+        overflow: hidden;
+    }
+    body[data-preview-layout="fixed"] .studio-center > * { flex-shrink: 0; }
+    body[data-preview-layout="fixed"] :is(#container,#preview-box,#preview-container) {
+        flex: 1 1 0%;
+        height: auto;
+        min-height: 0;
+        aspect-ratio: auto;
+    }
+    body[data-studio-page="CNC"] #hint { max-height: 46px; overflow-y: auto; }
+    body[data-studio-page="Gcodetrans"] .studio-workbench-wrapper {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        padding: 16px;
+    }
+    body[data-studio-page="Gcodetrans"] .studio-workbench { width: 100%; }
+    body[data-studio-page="Gcodetrans"] #sim-panel { max-height: 35%; overflow-y: auto; }
+}

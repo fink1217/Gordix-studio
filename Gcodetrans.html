@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>G-code Editor & Viewer</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="vendor/three-0.128.0.min.js"></script>
     <script src="gordix-table.js?v=10"></script>
     <script src="gordix-preview.js?v=10"></script>
     <script src="gordix-sim.js?v=10"></script>
@@ -72,7 +72,7 @@
             transition: background-color 0.3s, color 0.3s;
         }
         
-        /* 預覽視窗：核心設計強制維持 1:1 正方形 */
+        /* 手機預覽維持正方形，桌面由固定工作區分配可用高度。 */
         #preview-container { 
             width: 100%; 
             aspect-ratio: 1 / 1; 
@@ -158,10 +158,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon-192.png">
-    <link rel="stylesheet" href="gordix-ui.css?v=14">
-    <script src="gordix-ui.js?v=14" defer></script>
+    <link rel="stylesheet" href="gordix-ui.css?v=16">
+    <script src="gordix-ui.js?v=16" defer></script>
 </head>
-<body data-studio-page="Gcodetrans" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
+<body data-preview-layout="fixed" data-studio-page="Gcodetrans" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
     <div class="studio-shell max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors duration-300">
 
         <!-- 頂部導航 -->
@@ -204,12 +204,12 @@
             <a href="Gcodetrans.html" aria-current="step"><b>04</b><span class="studio-zh">檢查輸出</span><span class="studio-en">Review</span></a>
         </nav>
 
-        <div class="container mx-auto px-4 max-w-7xl">
+        <div class="studio-workbench-wrapper container mx-auto px-4 max-w-7xl">
             <!-- 主網格：行動端單欄，桌機端拆分為 3 - 6 - 3 三欄 -->
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            <div class="studio-workbench grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                 
                 <!-- 【左側控制面板】：檔案上傳 與 參數調整 -->
-                <div class="lg:col-span-3 space-y-4 order-2 lg:order-1">
+                <div class="studio-sidebar lg:col-span-3 space-y-4 order-2 lg:order-1">
                     
                     <!-- 1. 檔案上傳 -->
                     <div class="controls-card">
@@ -274,7 +274,7 @@
                 </div>
 
                 <!-- 【中央 3D 預覽面板】 -->
-                <div class="lg:col-span-6 order-1 lg:order-2">
+                <div class="studio-center lg:col-span-6 order-1 lg:order-2">
                     <div id="preview-container" class="shadow-2xl ring-1 ring-gray-700 select-none">
                         <div class="absolute top-3 right-3 z-10 flex items-center gap-2">
                             <!-- 2D 正上方俯視 / 3D 自由旋轉 -->
@@ -320,7 +320,7 @@
                 </div>
 
                 <!-- 【右側控制面板】：進階選項、參考底圖 與 下載按鈕 -->
-                <div class="lg:col-span-3 space-y-4 order-3 lg:order-3">
+                <div class="studio-sidebar lg:col-span-3 space-y-4 order-3 lg:order-3">
                     
                     <!-- 3. 進階選項 -->
                     <div class="controls-card">
@@ -2942,6 +2942,13 @@
 
     window.onload = () => {
         initThree();
+        // 功能面板展開或視窗改變時，3D 畫面依實際容器大小更新。
+        new ResizeObserver(() => {
+            const c=document.getElementById('preview-container');
+            if (!camera || !renderer || !c.clientWidth || !c.clientHeight) return;
+            camera.aspect=c.clientWidth/c.clientHeight;camera.updateProjectionMatrix();
+            renderer.setSize(c.clientWidth,c.clientHeight);
+        }).observe(document.getElementById('preview-container'));
         
         const savedTheme = localStorage.getItem('gordix-theme') || 'dark';
         if (savedTheme === 'dark') {

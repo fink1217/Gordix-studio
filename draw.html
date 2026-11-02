@@ -8,8 +8,8 @@
     <!-- 數字欄位可以輸入算式（+ - * /） -->
     <script src="gordix-calc.js?v=10"></script>
     <!-- 3D G-code 預覽（與 CNC.html 相同版本） -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="vendor/three-0.128.0.min.js"></script>
+    <script src="vendor/OrbitControls-0.128.0.js"></script>
     <script>
         tailwind.config = {
             darkMode: 'class'
@@ -150,10 +150,10 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link class="apple-touch-icon" href="icon-192.png">
-    <link rel="stylesheet" href="gordix-ui.css?v=14">
-    <script src="gordix-ui.js?v=14" defer></script>
+    <link rel="stylesheet" href="gordix-ui.css?v=16">
+    <script src="gordix-ui.js?v=16" defer></script>
 </head>
-<body data-studio-page="draw" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
+<body data-preview-layout="fixed" data-studio-page="draw" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
     <div class="studio-shell max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors duration-300">
         <!-- Header -->
         <div class="studio-header bg-gradient-to-r from-blue-700 to-indigo-900 p-4 md:p-6 gap-3 text-white flex justify-between items-center border-b border-indigo-500/30">
@@ -199,7 +199,7 @@
         </nav>
 
         <!-- 3-Column Layout: Left Sidebar (Inputs & Sliders) | Center (Preview Canvas) | Right Sidebar (Output Config & Downloader) -->
-        <div class="grid grid-cols-1 lg:grid-cols-12">
+        <div class="studio-workbench grid grid-cols-1 lg:grid-cols-12">
             
             <!-- Left Sidebar (3/12 width): Image Processing & Optimization Parameters -->
             <div class="studio-sidebar lg:col-span-3 p-6 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-6 overflow-y-auto max-h-[85vh] transition-colors duration-300">
@@ -532,7 +532,7 @@
 
     <script src="gordix-table.js?v=10"></script>
     <script src="gordix-workspace.js?v=10"></script>
-    <script src="gordix-import.js?v=10"></script>
+    <script src="gordix-import.js?v=16"></script>
     <script src="gordix-regions.js?v=10"></script>
     <script src="gordix-objects.js?v=12"></script>
     <script src="gordix-preview.js?v=10"></script>

@@ -1,6 +1,6 @@
 // 改共用 JS 時，這裡和各網頁 <script src="gordix-*.js?v=N"> 的版本號一起加 1，
 // 避免瀏覽器拿到「新網頁＋快取裡的舊共用檔」而整頁出錯。
-const CACHE_NAME = 'gordix-studio-v14';
+const CACHE_NAME = 'gordix-studio-v16';
 const ASSETS = [
   './index.html',
   './CNC.html',
@@ -27,8 +27,8 @@ const ASSETS = [
   './icon-192.png',
   './icon-512.png',
   './vendor/tailwindcss.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
-  'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js',
+  './vendor/three-0.128.0.min.js',
+  './vendor/OrbitControls-0.128.0.js',
   'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css'
 ];
 

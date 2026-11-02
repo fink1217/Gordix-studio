@@ -8,10 +8,10 @@
     <!-- 數字欄位可以輸入算式（+ - * /） -->
     <script src="gordix-calc.js?v=10"></script>
     <script>tailwind.config = { darkMode: 'class' }</script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/dxf-parser@1.1.2/dist/dxf-parser.min.js"></script>
+    <script src="vendor/three-0.128.0.min.js"></script>
+    <script src="vendor/OrbitControls-0.128.0.js"></script>
+    <script src="vendor/clipper-6.4.2.js"></script>
+    <script src="vendor/dxf-parser-1.1.2.min.js"></script>
     <style>
         html { overflow-y: scroll; }
         body:not(.show-advanced) [data-advanced] { display: none !important; }
@@ -45,10 +45,10 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="icon-192.png">
-    <link rel="stylesheet" href="gordix-ui.css?v=14">
-    <script src="gordix-ui.js?v=14" defer></script>
+    <link rel="stylesheet" href="gordix-ui.css?v=16">
+    <script src="gordix-ui.js?v=16" defer></script>
 </head>
-<body data-studio-page="CNC" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-3 md:p-6 text-slate-800 dark:text-slate-200 font-sans">
+<body data-preview-layout="fixed" data-studio-page="CNC" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-3 md:p-6 text-slate-800 dark:text-slate-200 font-sans">
 <div class="studio-shell max-w-[1600px] mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
     <!-- 頁首 -->
     <div class="studio-header bg-gradient-to-r from-orange-500 to-red-600 p-4 md:p-5 text-white flex justify-between items-center gap-3">
@@ -77,9 +77,9 @@
             <a href="Gcodetrans.html"><b>04</b><span class="studio-zh">檢查輸出</span><span class="studio-en">Review</span></a>
         </nav>
 
-    <main class="grid grid-cols-1 xl:grid-cols-[300px_1fr_330px] gap-4 p-3 md:p-4">
+    <main class="studio-workbench grid grid-cols-1 xl:grid-cols-[300px_1fr_330px] gap-4 p-3 md:p-4">
         <!-- 左：檔案、毛胚、圖層、刀具庫 -->
-        <div class="space-y-4 min-w-0">
+        <div class="studio-sidebar space-y-4 min-w-0">
             <section class="studio-panel card space-y-2">
                 <div data-i18n="secFile" class="label"></div>
                 <input type="file" id="file-input" multiple accept=".svg,.dxf,.png,.jpg,.jpeg,.bmp,.webp" class="hidden">
@@ -129,9 +129,10 @@
                 <div id="tool-list" class="space-y-1.5"></div>
                 <div id="tool-editor" class="hidden space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
                     <div class="grid grid-cols-2 gap-2">
+                        <label class="num-field col-span-2"><span data-i18n="teName"></span><input type="text" id="te-name" class="num-in" maxlength="80"></label>
                         <label class="num-field"><span data-i18n="teType"></span><select id="te-type" class="num-in"></select></label>
                         <label class="num-field"><span data-i18n="teD"></span><span class="num-wrap" data-unit="mm"><input type="number" id="te-d" class="num-in" min="0.1" step="0.001"></span></label>
-                        <label class="num-field te-flat"><span data-i18n="teFlutes"></span><select id="te-flutes" class="num-in"><option>1</option><option>2</option><option>3</option><option>4</option></select></label>
+                        <label class="num-field te-flat"><span data-i18n="teFlutes"></span><input type="number" id="te-flutes" class="num-in" min="1" step="1"></label>
                         <label class="num-field te-flat"><span data-i18n="teCut"></span><select id="te-cut" class="num-in"></select></label>
                         <label class="num-field te-vbit"><span data-i18n="teAngle"></span><span class="num-wrap" data-unit="°"><input type="number" id="te-angle" class="num-in" min="10" max="170" step="1"></span></label>
                         <label class="num-field"><span data-i18n="teF"></span><span class="num-wrap" data-unit="F"><input type="number" id="te-f" class="num-in" min="10" step="10"></span></label>
@@ -148,7 +149,7 @@
         </div>
 
         <!-- 中：預覽 -->
-        <div class="space-y-2 min-w-0">
+        <div class="studio-center space-y-2 min-w-0">
             <div class="flex flex-wrap items-center gap-2 text-[11px] font-bold">
                 <div class="flex bg-slate-200 dark:bg-slate-800 rounded-lg p-0.5">
                     <button id="view-2d" class="seg">2D</button>
@@ -175,7 +176,7 @@
         </div>
 
         <!-- 右：圖層設定、物件、輸出 -->
-        <div class="space-y-4 min-w-0">
+        <div class="studio-sidebar space-y-4 min-w-0">
             <section id="layer-panel" class="studio-panel card space-y-2 hidden">
                 <div class="flex justify-between items-center">
                     <div data-i18n="secLayer" class="label"></div>
@@ -193,6 +194,15 @@
                 </div>
                 <label id="lp-side-row" class="num-field"><span data-i18n="carveSide"></span><select id="lp-side" class="num-in"></select></label>
                 <label id="lp-tabs-row" class="flex items-center gap-1.5 text-[11px] font-bold"><input type="checkbox" id="lp-tabs" class="accent-orange-500"><span data-i18n="tabs"></span></label>
+                <div id="lp-laser-row" class="hidden space-y-2">
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="num-field"><span data-i18n="laserPower"></span><span class="num-wrap" data-unit="%"><input type="number" id="lp-laser-pct" class="num-in" min="0" max="100" step="0.1"></span></label>
+                        <label class="num-field"><span data-i18n="laserFeed"></span><span class="num-wrap" data-unit="F"><input type="number" id="lp-laser-feed" class="num-in" min="1" step="10"></span></label>
+                        <label class="num-field"><span data-i18n="laserPasses"></span><input type="number" id="lp-laser-passes" class="num-in" min="1" max="100" step="1"></label>
+                    </div>
+                    <div id="lp-laser-actual" class="text-xs font-mono text-slate-600 dark:text-slate-300"></div>
+                    <button id="lp-laser-advice" data-i18n="applyAdvice" class="btn btn-sub w-full"></button>
+                </div>
                 <div id="lp-advice" class="text-[11px] leading-relaxed whitespace-pre-line text-slate-600 dark:text-slate-300"></div>
                 <div id="lp-warn" class="text-[11px] font-bold text-amber-600 dark:text-amber-400 whitespace-pre-line"></div>
             </section>
@@ -251,9 +261,9 @@
 
 <script src="gordix-table.js?v=10"></script>
 <script src="gordix-workspace.js?v=10"></script>
-<script src="gordix-import.js?v=10"></script>
+<script src="gordix-import.js?v=16"></script>
 <script src="gordix-vcarve.js?v=10"></script>
-<script src="gordix-cam.js?v=10"></script>
+<script src="gordix-cam.js?v=16"></script>
 <script src="gordix-materials.js?v=10"></script>
 <script src="gordix-preview.js?v=10"></script>
 <script src="gordix-sim.js?v=10"></script>
@@ -268,9 +278,9 @@ const i18n = {
         secStock: '2 · 毛胚', linkStock: '毛胚設定 →', spindleNote: '⚠ 主軸手動開關：每個檔案開始前先開主軸。Z0 = 材料表面。',
         overcut: '切穿過切', safeZ: '安全高度', resolution: '解析度',
         stockLine: '工作台 {t} · 加工範圍 {rw} × {rh} mm\n{board}\n厚 {th} mm · {mat}', boardSize: '板材 {w} × {h} mm（置中）', boardMeasured: '板材：量測位置', noBoard: '不使用板材',
-        secLayers: '3 · 圖層', addLayer: '＋ 新增圖層', secTools: '刀具庫', addTool: '＋ 新增刀具', newLayer: '新圖層',
-        teType: '類型', teD: '刀徑', teFlutes: '刃數', teCut: '刃形', teAngle: 'V 角度', teF: '走速', teStep: '每層下刀', teOverlap: '挖槽重疊',
-        applyAdvice: '帶入材質建議值', done: '完成',
+        secLayers: '3 · 圖層', addLayer: '＋ 新增圖層', secTools: '刀具庫', addTool: '＋ 新增自訂刀具', newLayer: '新圖層',
+        teName: '自訂刀具名稱', editTool: '編輯', teType: '類型', teD: '刀徑', teFlutes: '刃數', teCut: '刃形', teAngle: 'V 角度', teF: '走速', teStep: '每層下刀', teOverlap: '挖槽重疊',
+        applyAdvice: '帶入材質建議值', done: '儲存刀具',
         flat: '平刀', vbit: 'V 刀', ball: '球刀', downcut: '下旋', upcut: '上旋', straight: '直刃', flutes: '{n} 刃',
         toolInUse: '還有圖層在用這把刀，請先換掉再刪除。', confirmDelTool: '刪除這把刀？',
         advice: '材質「{mat}」建議：走速 F{fr} · 每層 {dr} mm · 修邊機刻度 {dial}', adviceCap: '（夾板實測建議每層 ≤ {cap} mm）', adviceNone: '材質「{mat}」沒有 CNC 建議值',
@@ -279,7 +289,7 @@ const i18n = {
         empty: '請先選擇檔案', hint: '點圖形選取整個群組（雙擊只選單一物件、Shift 多選）、拖曳移動；拖曳空白處平移，滾輪縮放，雙擊空白處回到全景。Ctrl+Z 復原、Ctrl+Y 重做、Ctrl+G 群組、Ctrl+Shift+G 解散、Delete 刪除。',
         group: '群組（Ctrl+G）', ungroup: '解散群組', groupItem: '群組 {n}（{c} 個）', objItem: '物件 {n}', objCountG: '已選 {n} 個物件（{g} 個群組）',
         secLayer: '圖層設定', delLayer: '刪除圖層', op: '加工方式', tool: '刀具', depth: '深度', through: '切穿', tabs: '保留橋位（切穿時避免零件飛出）',
-        opProfile: '輪廓（自動判斷內外）', opOuter: '外輪廓', opInner: '內輪廓', opPocket: '挖槽', opLaser: '雷射切割', opVcarve: 'V 雕刻', opEngrave: '沿線雕刻',
+        opProfile: '輪廓（自動判斷內外）', opOuter: '外輪廓', opInner: '內輪廓', opPocket: '挖槽', opLaser: '雷射切割', opLaserLine: '雷射畫線（沿原線）', laserPower: '雷射功率', laserFeed: '雷射走速', laserPasses: '重複次數', laserActual: '目前輸出：功率 {p}% · S{s} · F{f} · {n} 次', opVcarve: 'V 雕刻', opEngrave: '沿線雕刻',
         carveSide: '雕哪一部分', sideOdd: '圖形本身（單獨的字、圖案）', sideEven: '框裡的字（外框留著）',
         warnVbit: '⚠ V 雕刻請用 V 刀或球刀', warnTooWide: '⚠ 刀具雕不滿這個圖層，沒有產生刀路：加深、換角度或直徑大一點的 V 刀，或把整體寬調小',
         warnThrough: '⚠ 深度 ≥ 板厚：要切穿請勾「切穿」', warnBit: '⚠ 輪廓、挖槽請用平刀', warnNoTool: '⚠ 沒有選刀具，這個圖層不會輸出',
@@ -304,9 +314,9 @@ const i18n = {
         secStock: '2 · Stock', linkStock: 'Stock setup →', spindleNote: '⚠ Spindle is manual: turn it on before each file. Z0 = material surface.',
         overcut: 'Overcut', safeZ: 'Safe Z', resolution: 'Resolution',
         stockLine: 'Table {t} · work range {rw} × {rh} mm\n{board}\n{th} mm thick · {mat}', boardSize: 'Board {w} × {h} mm (centered)', boardMeasured: 'Board: measured position', noBoard: 'No board',
-        secLayers: '3 · Layers', addLayer: '+ Add layer', secTools: 'Tool library', addTool: '+ Add tool', newLayer: 'New layer',
-        teType: 'Type', teD: 'Diameter', teFlutes: 'Flutes', teCut: 'Flute type', teAngle: 'V angle', teF: 'Feed', teStep: 'Depth per pass', teOverlap: 'Pocket overlap',
-        applyAdvice: 'Use material suggestion', done: 'Done',
+        secLayers: '3 · Layers', addLayer: '+ Add layer', secTools: 'Tool library', addTool: '+ Custom tool', newLayer: 'New layer',
+        teName: 'Custom tool name', editTool: 'Edit', teType: 'Type', teD: 'Diameter', teFlutes: 'Flutes', teCut: 'Flute type', teAngle: 'V angle', teF: 'Feed', teStep: 'Depth per pass', teOverlap: 'Pocket overlap',
+        applyAdvice: 'Use material suggestion', done: 'Save tool',
         flat: 'Flat', vbit: 'V-bit', ball: 'Ball nose', downcut: 'down-cut', upcut: 'up-cut', straight: 'straight', flutes: '{n}-flute',
         toolInUse: 'A layer still uses this tool. Change it first.', confirmDelTool: 'Delete this tool?',
         advice: '{mat}: feed F{fr} · {dr} mm per pass · router dial {dial}', adviceCap: ' (plywood field test: ≤ {cap} mm per pass)', adviceNone: 'No CNC data for {mat}',
@@ -315,7 +325,7 @@ const i18n = {
         empty: 'Choose a file first', hint: 'Click a shape to select its whole group (double-click for one object, Shift for more), drag to move; drag empty space to pan, wheel to zoom, double-click empty space to fit. Ctrl+Z undo, Ctrl+Y redo, Ctrl+G group, Ctrl+Shift+G ungroup, Delete removes.',
         group: 'Group (Ctrl+G)', ungroup: 'Ungroup', groupItem: 'Group {n} ({c})', objItem: 'Object {n}', objCountG: '{n} objects selected ({g} groups)',
         secLayer: 'Layer settings', delLayer: 'Delete layer', op: 'Operation', tool: 'Tool', depth: 'Depth', through: 'Cut through', tabs: 'Keep tabs (stop parts flying out)',
-        opProfile: 'Profile (auto inside/outside)', opOuter: 'Outside profile', opInner: 'Inside profile', opPocket: 'Pocket', opLaser: 'Laser cut', opVcarve: 'V-carve', opEngrave: 'Engrave along lines',
+        opProfile: 'Profile (auto inside/outside)', opOuter: 'Outside profile', opInner: 'Inside profile', opPocket: 'Pocket', opLaser: 'Laser cut', opLaserLine: 'Laser line (original path)', laserPower: 'Laser power', laserFeed: 'Laser feed', laserPasses: 'Passes', laserActual: 'Output: power {p}% · S{s} · F{f} · {n} pass(es)', opVcarve: 'V-carve', opEngrave: 'Engrave along lines',
         carveSide: 'Carve which part', sideOdd: 'The shapes themselves (letters, figures)', sideEven: 'Letters inside a frame (frame stays)',
         warnVbit: '⚠ Use a V-bit or ball nose for V-carving', warnTooWide: '⚠ The bit cannot carve this layer fully, so no toolpath was made: go deeper, use a wider or larger V-bit, or reduce the overall width',
         warnThrough: '⚠ Depth ≥ thickness: tick "Cut through" to cut through', warnBit: '⚠ Use a flat end mill for profiles and pockets', warnNoTool: '⚠ No tool selected; this layer is not output',
@@ -376,6 +386,7 @@ const toolById = id => tools.find(t => t.id === id);
 function toolName(t) {
     if (!t) return '—';
     const L = T();
+    if (t.name && t.name.trim()) return t.name.trim()+' · '+toolName({...t,name:''});
     if (t.type === 'vbit') return `${L.vbit} ${t.angle}° Ø${t.d}`;
     if (t.type === 'ball') return `${L.ball} Ø${t.d}`;
     return `${L.flat} Ø${t.d} ${fill(L.flutes, { n: t.flutes || 2 })}${L[t.cut || 'downcut']}`;
@@ -385,8 +396,8 @@ let editingTool = null;
 // ===== 工作（只在記憶體，重新整理清空，與舊版相同）=====
 const job = { name: 'job', thickness: stock.t, overcut: 0.3, safeZ: 2, resolution: 0.1, layers: [], objects: [] };
 const LAYER_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ec4899', '#14b8a6', '#ef4444'];
-const OPS = ['profile', 'outer', 'inner', 'pocket', 'vcarve', 'engrave', 'laser', 'drillMark'];
-const OP_KEY = { profile: 'opProfile', outer: 'opOuter', inner: 'opInner', pocket: 'opPocket', laser: 'opLaser', vcarve: 'opVcarve', engrave: 'opEngrave', drillMark: 'opDrill' };
+const OPS = ['profile', 'outer', 'inner', 'pocket', 'vcarve', 'engrave', 'laserLine', 'laser', 'drillMark'];
+const OP_KEY = { profile: 'opProfile', outer: 'opOuter', inner: 'opInner', pocket: 'opPocket', laser: 'opLaser', laserLine: 'opLaserLine', vcarve: 'opVcarve', engrave: 'opEngrave', drillMark: 'opDrill' };
 const isCarveOp = op => op === 'vcarve' || op === 'engrave';   // 立體雕刻：一次到深（或依刀具分層），沒有切穿
 let source = null, groupMode = 'layer', layerSeq = 0, files = [];
 let selLayerId = null, groupSeq = 0;
@@ -448,6 +459,7 @@ function renderUndo() {
 }
 
 const isRouterOp = op => GordixCam.OPS[op].head === 'router';
+const isLaserOp = op => GordixCam.OPS[op].head === 'laser';
 const firstFlat = () => (tools.find(t => t.type === 'flat') || tools[0] || {}).id || null;
 
 // 讀檔：向量檔有 mm 單位（或是 DXF）時整體寬帶入實際尺寸
@@ -535,7 +547,7 @@ function appendPaths(paths,center,replace) {
     groups.forEach((g,i)=>g.paths.forEach(p=>{
         const index=paths.indexOf(p), prior=stable ? previous.find(o=>o.pathIndex===index) : null;
         const matrix=prior?.matrix || (replace && previous[0]?.matrix) || {a:1,b:0,c:0,d:1,e:center.x,f:center.y};
-        added.push({id:prior?.id || ++objectSeq,sourceId:source.id,pathIndex:index,layerId:prior && !oldLayers.some(l=>l.id===prior.layerId) && job.layers.some(l=>l.id===prior.layerId) ? prior.layerId : layers[i].id,
+        added.push({id:prior?.id || ++objectSeq,sourceId:source.id,pathIndex:index,closed:p.closed,layerId:prior && !oldLayers.some(l=>l.id===prior.layerId) && job.layers.some(l=>l.id===prior.layerId) ? prior.layerId : layers[i].id,
             matrix:{...matrix},groupId:prior?.groupId || null,
             points:p.points.map(q=>({x:matrix.a*q.x+matrix.c*q.y+matrix.e,y:matrix.b*q.x+matrix.d*q.y+matrix.f}))});
     }));
@@ -615,7 +627,7 @@ function renderLayers() {
     $('layer-list').innerHTML = job.layers.map(l => {
         const n = job.objects.filter(o => o.layerId === l.id).length;
         const tool = isRouterOp(l.op) ? toolName(toolById(l.toolId)) : '';
-        const depth = l.op === 'laser' ? '' : (l.through ? L.through : `${l.depth} mm`);
+        const depth = isLaserOp(l.op) ? '' : (l.through ? L.through : `${l.depth} mm`);
         const warn = layerWarnings(l).length ? '<span class="text-amber-500">⚠</span>' : '';
         const open = expanded.has(l.id);
         return `<div class="row p-2 flex items-center gap-2 ${l.id === selLayerId ? 'active' : ''}" data-layer="${l.id}">
@@ -691,6 +703,14 @@ function renderLayerPanel() {
     $('lp-tool').value = l.toolId || '';
     const router = isRouterOp(l.op);
     $('lp-tool-row').classList.toggle('hidden', !router);
+    $('lp-laser-row').classList.toggle('hidden', !isLaserOp(l.op));
+    if (isLaserOp(l.op)) {
+        const pct=l.laserPct ?? 100,feed=l.feed || 1000,passes=l.laserPasses || 1;
+        ['lp-laser-pct','lp-laser-feed','lp-laser-passes'].forEach(id=>{if (document.activeElement!==$(id)) $(id).classList.remove('calc-bad');});
+        set('lp-laser-pct',pct);set('lp-laser-feed',feed);set('lp-laser-passes',passes);
+        $('lp-laser-actual').innerText=fill(L.laserActual,{p:pct,s:Math.round(pct*255/100),f:feed,n:passes});
+        $('lp-laser-advice').disabled=!laserAdvice(l);
+    }
     $('lp-depth-row').classList.toggle('hidden', !router);
     set('lp-depth', l.through ? Math.round((job.thickness + job.overcut) * 100) / 100 : l.depth);
     $('lp-depth').disabled = l.through;
@@ -704,8 +724,8 @@ function renderLayerPanel() {
     $('lp-warn').innerText = layerWarnings(l).join('\n');
     // 材質建議：刀具的走速、每層下刀和材質建議比較
     const tool = toolById(l.toolId), lines = [];
-    if (l.op === 'laser') {
-        const a = GordixMaterials.laserAdvice(stock.material, 'cut', stock.t);
+    if (isLaserOp(l.op)) {
+        const a = laserAdvice(l);
         if (a) lines.push(fill(L.laserAdvice, { p: a.pct, f: a.speed, n: a.passes }));
     } else if (tool) lines.push(...toolAdviceLines(tool));
     $('lp-advice').innerText = lines.join('\n');
@@ -730,11 +750,32 @@ $('lp-color').addEventListener('input', e => { curLayer().color = e.target.value
 $('lp-op').onchange = e => {
     const l = curLayer();
     l.op = e.target.value;
+    if (isLaserOp(l.op) && l.laserPct===undefined) {
+        const a=laserAdvice(l);l.laserPct=a ? a.pct : l.op==='laserLine' ? 25 : 100;
+        l.feed=a ? a.speed : 1000;l.laserPasses=a ? a.passes : 1;
+    }
     // 雕刻預設換成 V 刀，輪廓 / 挖槽換回平刀（使用者之後還可以自己改）
     const t = toolById(l.toolId), carveTool = tools.find(x => x.type !== 'flat');
     if (isCarveOp(l.op)) { l.through = false; if ((!t || t.type === 'flat') && carveTool && l.op === 'vcarve') l.toolId = carveTool.id; }
     else if (isRouterOp(l.op) && (!t || t.type !== 'flat')) l.toolId = firstFlat();
     rebuild();
+};
+/** 雷射畫線採雕刻建議，切割採切割建議；只有按帶入才覆寫既有設定。 */
+function laserAdvice(layer) {
+    return GordixMaterials.laserAdvice(stock.material,layer.op==='laserLine'?'engrave':'cut',stock.t);
+}
+[['lp-laser-pct','laserPct',0,100],['lp-laser-feed','feed',1,Infinity],['lp-laser-passes','laserPasses',1,100]].forEach(([id,key,min,max])=>{
+    $(id).addEventListener('change',()=>{
+        const value=parseFloat($(id).value);
+        const valid=Number.isFinite(value) && value>=min && value<=max && (key!=='laserPasses' || Number.isInteger(value));
+        $(id).classList.toggle('calc-bad',!valid);
+        if (!valid) return;
+        curLayer()[key]=value;rebuild();
+    });
+});
+$('lp-laser-advice').onclick=()=>{
+    const l=curLayer(),a=laserAdvice(l);if (!a) return;
+    l.laserPct=a.pct;l.feed=a.speed;l.laserPasses=a.passes;rebuild();
 };
 $('lp-side').onchange = e => { curLayer().carveSide = e.target.value; rebuild(); };
 $('lp-tool').onchange = e => { curLayer().toolId = e.target.value; rebuild(); };
@@ -759,7 +800,7 @@ function renderTools() {
             <div class="text-[12px] font-bold truncate">${esc(toolName(t))}</div>
             <div class="text-[10px] text-slate-500 font-mono">F${t.f}${t.type === 'flat' ? ` · ${t.step} mm` : ''}</div>
         </div>
-        <button data-act="edit" class="text-[11px] px-1">✎</button>
+        <button data-act="edit" class="text-[11px] px-1">${L.editTool}</button>
         <button data-act="del" class="text-[11px] px-1 text-red-500">✕</button>
     </div>`).join('');
     const t = toolById(editingTool);
@@ -769,6 +810,7 @@ function renderTools() {
     $('te-type').innerHTML = ['flat', 'vbit', 'ball'].map(k => `<option value="${k}">${L[k]}</option>`).join('');
     $('te-cut').innerHTML = ['downcut', 'upcut', 'straight'].map(k => `<option value="${k}">${L[k]}</option>`).join('');
     $('te-type').value = t.type;
+    set('te-name',t.name || '');
     set('te-d', t.d); $('te-flutes').value = t.flutes || 2; $('te-cut').value = t.cut || 'downcut';
     set('te-angle', t.angle || 90); set('te-f', t.f); set('te-step', t.step); set('te-overlap', t.overlap || 0.5);
     document.querySelectorAll('.te-flat').forEach(el => el.classList.toggle('hidden', t.type !== 'flat'));
@@ -800,10 +842,12 @@ $('btn-add-tool').onclick = () => {
     editingTool = t.id;
     saveTools();
     rebuild();
+    $('tool-editor').scrollIntoView({block:'nearest'});$('te-name').focus();
 };
 const editTool = (fn) => { const t = toolById(editingTool); if (!t) return; fn(t); if (t.type !== 'flat') t.step = 99; saveTools(); rebuild(); };
+$('te-name').addEventListener('change',e=>editTool(t=>{t.name=e.target.value.trim();}));
 $('te-type').onchange = e => editTool(t => { t.type = e.target.value; if (t.type === 'flat' && (!t.step || t.step >= 99)) t.step = 1.0; });
-$('te-flutes').onchange = e => editTool(t => { t.flutes = parseInt(e.target.value, 10); });
+$('te-flutes').onchange=e=>{const n=+e.target.value;if (Number.isInteger(n) && n>=1) editTool(t=>{t.flutes=n;});};
 $('te-cut').onchange = e => editTool(t => { t.cut = e.target.value; });
 [['te-d', 'd', 0.1], ['te-angle', 'angle', 10], ['te-f', 'f', 10], ['te-step', 'step', 0.05], ['te-overlap', 'overlap', 0.1]].forEach(([id, key, min]) =>
     $(id).addEventListener('change', e => { const v = parseFloat(e.target.value); if (v >= min) editTool(t => { t[key] = v; }); }));
@@ -939,8 +983,11 @@ function renderFiles() {
             const a = adviceFor(f.tool);
             step = fill(routerSeen++ ? L.stepChange : L.stepFirst, { tool: toolName(f.tool), dial: a ? a.dial : '3' });
         } else {
-            const a = GordixMaterials.laserAdvice(stock.material, 'cut', stock.t);
-            step = L.stepLaser + (a ? '\n' + fill(L.laserAdvice, { p: a.pct, f: a.speed, n: a.passes }) : '');
+            const ids=[...new Set(f.units.map(u=>u.layerId))];
+            step=L.stepLaser+'\n'+ids.map(id=>{
+                const l=job.layers.find(l=>l.id===id),p=l.laserPct ?? 100;
+                return l.name+' · '+fill(L.laserActual,{p,s:Math.round(p*255/100),f:l.feed || 1000,n:l.laserPasses || 1});
+            }).join('\n');
         }
         const layers = f.units ? [...new Set(f.units.map(u => u.layerId))].map(id => (job.layers.find(l => l.id === id) || {}).name).join('、') : L.layoutTitle;
         return `<div class="row p-2.5 space-y-1 cursor-default" data-file="${i}">
@@ -1034,7 +1081,7 @@ function render2D() {
     const area = o => { const b = selectionBox([o]); return (b.maxX - b.minX) * (b.maxY - b.minY); };
     [...job.objects].sort((a, b) => area(b) - area(a)).forEach(o => {
         const l = layerOf(o.layerId), sel = selObjs.has(o.id), dim = !l.visible || (selLayerId && o.layerId !== selLayerId && !sel);
-        s.push(`<path data-obj="${o.id}" d="${pathD(o.points, true)}" fill="${sel ? 'rgba(250,204,21,0.12)' : 'rgba(0,0,0,0.001)'}" stroke="${sel ? '#facc15' : l.color}"
+        s.push(`<path data-obj="${o.id}" d="${pathD(GordixCam.objectPath(o,l.op), l.op!=='laserLine' || o.closed!==false)}" fill="${sel ? 'rgba(250,204,21,0.12)' : 'rgba(0,0,0,0.001)'}" stroke="${sel ? '#facc15' : l.color}"
             stroke-width="${sel ? 2.5 : 1.5}" stroke-opacity="${dim ? 0.35 : 1}" ${l.visible ? '' : 'stroke-dasharray="3 3"'} ${nss} style="cursor:move"/>`);
     });
     // 加工順序（跨檔連號）
