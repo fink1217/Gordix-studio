@@ -283,6 +283,7 @@
 <script src="gordix-materials.js?v=10"></script>
 <script src="gordix-preview.js?v=18"></script>
 <script src="gordix-sim.js?v=18"></script>
+<script src="gordix-recovered.js?v=20"></script>
 <script>
 // CNC 加工工具：圖層決定加工方式，同一把刀同一檔、換刀分檔，檔內由機器中心往外。
 // 刀路、排序、分檔與 G-code 都在 gordix-cam.js；這裡負責畫面、擺放與預覽。
@@ -607,6 +608,7 @@ function rebuild(record = true) {
     job.safeZ = Math.max(0.5, parseFloat($('safe-z').value) || 2);
     job.resolution = Math.max(0.05, parseFloat($('resolution').value) || 0.1);
     files = job.objects.length ? GordixCam.buildFiles(job, tools) : [];
+    files = GordixRecovered.apply(files,job,tools);
     buildLayout();
     renderAll();
     schedulePreview();
@@ -854,7 +856,7 @@ function renderLayerPanel() {
     $('lp-tabs').checked = l.tabs;
     $('lp-tab-settings').classList.toggle('hidden',!(router && l.through && l.tabs && l.op!=='pocket'));
     set('lp-tab-height',l.tabHeight ?? Math.min(2,job.thickness/2));$('lp-tab-height').max=job.thickness;
-    const markers=GordixCam.tabMarkers(files.flatMap(f=>f.units).filter(u=>u.layerId===l.id));
+    const markers=files.flatMap(fileTabMarkers).filter(marker=>marker.layerId===l.id);
     $('lp-tab-summary').innerText=markers.length ? `${markers.length} 個橋位 · Z ${markers[0].z.toFixed(2)} mm` : '';
     $('lp-warn').innerText = layerWarnings(l).join('\n');
     // 材質建議：刀具的走速、每層下刀和材質建議比較
@@ -1222,7 +1224,7 @@ function render2D() {
 
     // 刀路（拖曳中先不畫，放開後重算）
     if (!dragging) {
-        files.forEach(f => f.units.forEach(un => {
+        files.forEach(f => (f.displayUnits || f.units).forEach(un => {
             if(!unitShown(un))return;
             const l = layerOf(un.layerId), d = f.tool ? f.tool.d : 0.3;
             const dd = un.phases.flatMap(ph => ph.paths.filter(p => p.length > 1).map(p => pathD(p, false))).join('');
@@ -1240,7 +1242,7 @@ function render2D() {
     // 加工順序（跨檔連號）
     if ($('opt-order').checked && !dragging) {
         let n = 1;
-        files.forEach(f => f.units.forEach(un => {
+        files.forEach(f => (f.displayUnits || f.units).forEach(un => {
             const order=n++;if(!unitShown(un))return;
             const ph = un.phases.find(p => p.paths.length && p.paths[0].length), p = ph && ph.paths[0][0];
             if (!p) return;
@@ -1270,7 +1272,7 @@ function render2D() {
         s.push(`<circle id="cnc-rotate" cx="${cx}" cy="${-b.maxY-28*u}" r="${7*u}" fill="white" stroke="#facc15" stroke-width="2" ${nss} style="cursor:grab"/>`);
     }
     if ($('opt-tabs').checked) {
-        GordixCam.tabMarkers(files.flatMap(f=>f.units).filter(unitShown)).forEach(marker=>{
+        files.flatMap(fileTabMarkers).filter(unitShown).forEach(marker=>{
             s.push(`<circle data-tab-marker="1" cx="${marker.x}" cy="${-marker.y}" r="${Math.max(5*u,marker.radius)}" fill="rgba(245,158,11,.28)" stroke="#f59e0b" stroke-width="2.5" ${nss} pointer-events="none"/>`);
         });
     }
@@ -1455,7 +1457,8 @@ function build3d() {
 }
 
 /** 同一份橋位資料供2D與3D標示。 */
-function syncTabMarkers(){if(view3d)view3d.setMarkers($('opt-tabs').checked?GordixCam.tabMarkers(files.flatMap(f=>f.units)):[]);}
+function fileTabMarkers(file){return file.recoveredMarkers ?? GordixCam.tabMarkers(file.units);}
+function syncTabMarkers(){if(view3d)view3d.setMarkers($('opt-tabs').checked?files.flatMap(fileTabMarkers):[]);}
 
 
 function headAt(st) {
@@ -1559,7 +1562,7 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => { }));
 }
 </script>
-<script src="gordix-gcode-preview.js?v=19"></script>
-<script src="gordix-project.js?v=19"></script>
+<script src="gordix-gcode-preview.js?v=20"></script>
+<script src="gordix-project.js?v=20"></script>
 </body>
 </html>

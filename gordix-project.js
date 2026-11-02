@@ -12,6 +12,9 @@
         <button id="project-recover" class="btn btn-sub w-full" hidden>恢復上次工作</button>
         <div id="project-status" class="text-xs" role="status">專案包含原圖、物件位置、群組、圖層、刀具與加工設定。</div>`;
     document.querySelector('.studio-sidebar').prepend(panel);
+    const recoveryStatus=document.createElement('div');
+    recoveryStatus.id='project-recovery-mode';recoveryStatus.className='text-xs';
+    panel.append(recoveryStatus);
     const status = message => { $('project-status').textContent = message; };
     const clone = value => JSON.parse(JSON.stringify(value));
     let timer, applying = false, previous = null, queue = Promise.resolve();
@@ -55,6 +58,7 @@
         });
         // 預先建立刀路，失敗時尚未變更目前工作。
         GordixCam.buildFiles(clone(j),clone(data.tools));
+        if(j.recovery)GordixRecovered.apply(GordixCam.buildFiles(clone(j),clone(data.tools)),clone(j),clone(data.tools));
         return data;
     }
 
@@ -108,6 +112,10 @@
         return queue.then(()=>status(`已自動備份 ${new Date(data.savedAt).toLocaleTimeString()}`));
     }
     window.addEventListener('gordix:change',()=>{
+        recoveryStatus.textContent=!job.recovery ? '' : files.some(file=>file.recoveryMode==='rebuilt')
+            ? '已修改橋位以外的設定：輸出改用重新計算的 CAM 刀路。'
+            : files.some(file=>file.recoveryMode==='tabs') ? '已恢復可編輯專案：沿用原刀路 XY，只調整橋位高度。'
+            : '已恢復可編輯專案：輸出保留原始刀路；可直接修改圖層橋位。';
         if(applying) return;
         clearTimeout(timer);timer=setTimeout(()=>{
             if(importBusy || sourcePending) return;
