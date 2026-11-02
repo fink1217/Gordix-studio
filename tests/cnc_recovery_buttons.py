@@ -1,5 +1,6 @@
 """實際點擊恢復入口，核對原生選檔視窗與模態視窗內操作。"""
 from pathlib import Path
+import json
 from playwright.sync_api import sync_playwright
 from draw_objects import BASE, RESULTS, check
 
@@ -38,6 +39,20 @@ def main():
             pending.value.set_files(str(project))
             page.wait_for_function('!document.querySelector("#gcode-preview-dialog").open')
             check('模態視窗內也可開啟專案', page.evaluate('job.objects.length===217'))
+            archive = project.with_name('composition.recovery.gordix.json')
+            if archive.exists():
+                data = json.loads(archive.read_text(encoding='utf-8'))
+                with page.expect_file_chooser() as pending:
+                    page.click('#gcode-import')
+                pending.value.set_files([{'name':f['name'], 'mimeType':'text/plain', 'buffer':f['gcode'].encode()} for f in data['files']])
+                page.wait_for_selector('#gcode-preview-dialog[open]')
+                with page.expect_file_chooser() as pending:
+                    page.click('#gcode-source-input')
+                pending.value.set_files([{'name':s['name'], 'mimeType':'image/svg+xml', 'buffer':s['data'].encode()} for s in data['sources']])
+                page.wait_for_function('document.querySelector("#gcode-recovery-files").textContent.includes("staff_core")')
+                page.click('#gcode-restore-edit')
+                page.wait_for_function('!document.querySelector("#gcode-preview-dialog").open')
+                check('明確選擇原圖後可恢復且輸出不變', page.evaluate('job.objects.length===217') and page.evaluate('files.map(f=>f.gcode)') == [f['gcode'] for f in data['files']])
         browser.close()
     assert all(RESULTS)
 

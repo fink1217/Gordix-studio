@@ -12,7 +12,14 @@ window.GordixGcodePreview = (() => {
         <input id="gcode-recovery-input" type="file" accept=".json,.gordix,.svg,.gcode,.nc,.tap,.txt" multiple hidden>
         <select id="gcode-file-select" aria-label="預覽的 G-code" class="num-in" style="max-width:480px"></select></div>
         <p id="gcode-preview-note" style="font-size:13px;margin:8px 0"></p>
-        <div id="gcode-preview-canvas" style="height:calc(100% - 160px);min-height:180px;position:relative"></div>
+        <div style="padding:8px;border:1px solid #64748b;border-radius:6px;font-size:13px">
+        <div>恢復編輯：先選原始 SVG，再確認雷射與銑刀兩份 G-code，最後按上方「恢復到主編輯區」。</div>
+        <label style="display:block;margin-top:6px">① 原始 SVG（可多選，不是 PNG／JPG）
+        <input id="gcode-source-input" type="file" accept=".svg" multiple></label>
+        <label style="display:block;margin-top:6px">② 補充 G-code（已有的檔案不用重選）
+        <input id="gcode-extra-input" type="file" accept=".gcode,.nc,.tap,.txt" multiple></label>
+        <div id="gcode-recovery-files" role="status" style="margin-top:6px;overflow-wrap:anywhere"></div></div>
+        <div id="gcode-preview-canvas" style="height:calc(100% - 290px);min-height:180px;position:relative"></div>
         <div id="gcode-preview-player"></div><div id="gcode-preview-info" style="font-size:12px"></div>`;
     document.body.append(dialog);
     const el=id=>document.getElementById(id);
@@ -44,6 +51,7 @@ window.GordixGcodePreview = (() => {
         if(data?.format!=='gordix-gcode-recovery' || data.version!==1 || !Array.isArray(data.files) || !data.files.length)throw Error('刀路恢復檔格式無效');
         data.files.forEach(file=>{if(typeof file.name!=='string')throw Error('刀路缺少名稱');validate(file.gcode);});
         archive=JSON.parse(JSON.stringify(data));
+        renderRecoveryFiles();
         el('gcode-restore-edit').disabled=false;
         el('gcode-restore-edit').title='恢復物件、圖層與可輸出的刀路；缺少原圖時可補選檔案';
         el('gcode-file-select').replaceChildren(...archive.files.map((file,index)=>{const option=document.createElement('option');option.value=index;option.textContent=file.name;return option;}));
@@ -54,6 +62,24 @@ window.GordixGcodePreview = (() => {
     el('gcode-close').onclick=()=>dialog.close();
     dialog.addEventListener('close',()=>player?.pause());
     el('gcode-top').onclick=()=>{top=!top;view?.setTop(top);};
+    function renderRecoveryFiles() {
+        el('gcode-recovery-files').textContent=`已載入原圖：${(archive.sources || []).map(file=>file.name).join('、') || '尚未選擇'}；刀路：${archive.files.map(file=>file.name).join('、')}`;
+    }
+    async function addFiles(event,isSource) {
+        try {
+            const inputs=[...event.target.files];if(!inputs.length)return;
+            if(inputs.reduce((sum,file)=>sum+file.size,0)>100*1024*1024)throw Error('檔案合計超過 100 MB');
+            const additions=await Promise.all(inputs.map(async file=>isSource ? {name:file.name,data:await file.text()}:{name:file.name,gcode:await file.text()}));
+            if(!isSource)additions.forEach(file=>validate(file.gcode));
+            archive.sources=archive.sources || [];
+            const list=isSource ? archive.sources:archive.files;
+            additions.forEach(file=>{const index=list.findIndex(old=>old.name===file.name);if(index>=0)list[index]=file;else list.push(file);});
+            renderRecoveryFiles();el('gcode-preview-note').textContent='檔案已加入。確認原圖與兩份刀路後，按「恢復到主編輯區」。';
+        }catch(error){el('gcode-preview-note').textContent=`加入失敗：${error.message}`;}
+        finally{event.target.value='';}
+    }
+    el('gcode-source-input').onchange=event=>addFiles(event,true);
+    el('gcode-extra-input').onchange=event=>addFiles(event,false);
     function chooseFiles() {
         el('gcode-preview-note').textContent='請選擇可編輯專案 JSON；或同時選取原始 SVG 與雷射、銑刀 G-code。';
         el('gcode-recovery-input').click();
