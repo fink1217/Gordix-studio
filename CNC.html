@@ -145,6 +145,7 @@
                 <label class="flex items-center gap-1"><input type="checkbox" id="opt-width" class="accent-orange-500"><span data-i18n="optWidth"></span></label>
                 <label class="flex items-center gap-1"><input type="checkbox" id="opt-order" class="accent-orange-500" checked><span data-i18n="optOrder"></span></label>
                 <label class="flex items-center gap-1"><input type="checkbox" id="opt-foot" class="accent-orange-500"><span data-i18n="optFoot"></span></label>
+                <label class="flex items-center gap-1"><input type="checkbox" id="opt-zone" class="accent-orange-500" checked><span data-i18n="optZone"></span></label>
                 <span class="flex-1"></span>
                 <button id="btn-top" data-i18n="btnTop" class="btn btn-sub hidden"></button>
                 <button id="btn-fit" data-i18n="btnFit" class="btn btn-sub"></button>
@@ -176,6 +177,7 @@
                     <label class="num-field"><span data-i18n="depth"></span><span class="num-wrap" data-unit="mm"><input type="number" id="lp-depth" class="num-in" min="0.1" step="0.1"></span></label>
                     <label class="flex items-center gap-1.5 text-[11px] font-bold pb-2"><input type="checkbox" id="lp-through" class="accent-orange-500"><span data-i18n="through"></span></label>
                 </div>
+                <label id="lp-side-row" class="num-field"><span data-i18n="carveSide"></span><select id="lp-side" class="num-in"></select></label>
                 <label id="lp-tabs-row" class="flex items-center gap-1.5 text-[11px] font-bold"><input type="checkbox" id="lp-tabs" class="accent-orange-500"><span data-i18n="tabs"></span></label>
                 <div id="lp-advice" class="text-[11px] leading-relaxed whitespace-pre-line text-slate-600 dark:text-slate-300"></div>
                 <div id="lp-warn" class="text-[11px] font-bold text-amber-600 dark:text-amber-400 whitespace-pre-line"></div>
@@ -208,6 +210,19 @@
                     <div data-i18n="secFiles" class="label"></div>
                     <span id="total-time" class="text-[11px] font-mono font-bold text-orange-500"></span>
                 </div>
+                <!-- 放樣檔：加工前用畫筆或雷射標出外框、孔位十字、零件編號 -->
+                <div class="row p-2.5 space-y-1.5 cursor-default">
+                    <label class="flex items-center gap-2 text-[12px] font-black"><input type="checkbox" id="lo-on" class="accent-orange-500"><span data-i18n="layoutTitle"></span></label>
+                    <div id="lo-opts" class="space-y-1.5 text-[11px]">
+                        <div class="flex flex-wrap gap-x-3 gap-y-1">
+                            <label class="flex items-center gap-1"><input type="checkbox" id="lo-outline" class="accent-orange-500" checked><span data-i18n="loOutline"></span></label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="lo-cross" class="accent-orange-500" checked><span data-i18n="loCross"></span></label>
+                            <label class="flex items-center gap-1"><input type="checkbox" id="lo-num" class="accent-orange-500" checked><span data-i18n="loNum"></span></label>
+                        </div>
+                        <label class="flex items-center gap-2"><span data-i18n="loHead"></span><select id="lo-head" class="num-in !w-auto"></select></label>
+                        <div id="lo-info" class="text-slate-500 whitespace-pre-line"></div>
+                    </div>
+                </div>
                 <div id="file-list" class="space-y-2"></div>
                 <button id="btn-download-all" data-i18n="downloadAll" class="btn btn-main w-full py-3 text-sm disabled:opacity-40" disabled></button>
             </section>
@@ -215,13 +230,14 @@
     </main>
 </div>
 
-<script src="gordix-table.js?v=9"></script>
-<script src="gordix-workspace.js?v=9"></script>
-<script src="gordix-import.js?v=9"></script>
-<script src="gordix-cam.js?v=9"></script>
-<script src="gordix-materials.js?v=9"></script>
-<script src="gordix-preview.js?v=9"></script>
-<script src="gordix-sim.js?v=9"></script>
+<script src="gordix-table.js?v=10"></script>
+<script src="gordix-workspace.js?v=10"></script>
+<script src="gordix-import.js?v=10"></script>
+<script src="gordix-vcarve.js?v=10"></script>
+<script src="gordix-cam.js?v=10"></script>
+<script src="gordix-materials.js?v=10"></script>
+<script src="gordix-preview.js?v=10"></script>
+<script src="gordix-sim.js?v=10"></script>
 <script>
 // CNC 加工工具：圖層決定加工方式，同一把刀同一檔、換刀分檔，檔內由機器中心往外。
 // 刀路、排序、分檔與 G-code 都在 gordix-cam.js；這裡負責畫面、擺放與預覽。
@@ -243,7 +259,9 @@ const i18n = {
         optWidth: '實際刀寬', optOrder: '加工順序', optFoot: '機器底面', btnTop: '俯視', btnFit: '全景',
         empty: '請先選擇檔案', hint: '點圖形選取（Shift 多選）、拖曳移動；拖曳空白處平移，滾輪縮放，雙擊空白處回到全景。',
         secLayer: '圖層設定', delLayer: '刪除圖層', op: '加工方式', tool: '刀具', depth: '深度', through: '切穿', tabs: '保留橋位（切穿時避免零件飛出）',
-        opProfile: '輪廓（自動判斷內外）', opOuter: '外輪廓', opInner: '內輪廓', opPocket: '挖槽', opLaser: '雷射切割',
+        opProfile: '輪廓（自動判斷內外）', opOuter: '外輪廓', opInner: '內輪廓', opPocket: '挖槽', opLaser: '雷射切割', opVcarve: 'V 雕刻', opEngrave: '沿線雕刻',
+        carveSide: '雕哪一部分', sideOdd: '圖形本身（單獨的字、圖案）', sideEven: '框裡的字（外框留著）',
+        warnVbit: '⚠ V 雕刻請用 V 刀或球刀', warnTooWide: '⚠ 刀具雕不滿這個圖層，沒有產生刀路：加深、換角度或直徑大一點的 V 刀，或把整體寬調小',
         warnThrough: '⚠ 深度 ≥ 板厚：要切穿請勾「切穿」', warnBit: '⚠ 輪廓、挖槽請用平刀', warnNoTool: '⚠ 沒有選刀具，這個圖層不會輸出',
         confirmDelLayer: '這個圖層有 {n} 個物件，一起刪除？', hidden: '不輸出', objs: '{n} 個',
         secObj: '物件', selectAll: '全選', objHint: '在預覽上點圖形選取，Shift 可多選。', objCount: '已選 {n} 個物件', objLayer: '圖層', width: '寬', height: '高',
@@ -252,7 +270,12 @@ const i18n = {
         stepFirst: '裝上 {tool} → Z0 對材料表面 → 修邊機刻度 {dial} → 開主軸', stepChange: '停主軸 → 換 {tool} → 重新對 Z0 → 修邊機刻度 {dial} → 開主軸',
         stepLaser: '裝雷射模組 → 對 Z0 → 戴護目鏡、開吹氣', laserAdvice: '材質建議：功率 {p}% · 速度 F{f} · {n} 次', fileInfo: '{layers} · 約 {t}',
         warnRange: '⚠ 有物件超出機器加工範圍', warnBoard: '⚠ 有物件超出板材',
-        tableName: '工作台', front: '前側', legendRange: '加工範圍', legendBoard: '板材', foot: '機器底面 250 × 250'
+        tableName: '工作台', front: '前側', legendRange: '加工範圍', legendBoard: '板材', foot: '機器底面 250 × 250',
+        opDrill: '只標孔位（手鑽）', optZone: '高精度區',
+        zone: '中央高精度區：約 ±0.5 mm（邊緣約 1～2 mm；第三方評測，非原廠數據）', warnZone: 'ⓘ 部分物件在中央高精度區外，邊緣精度較差',
+        layoutTitle: '放樣檔（加工前先標位置）', loOutline: '零件外框', loCross: '孔位十字', loNum: '零件編號', loHead: '用',
+        loPen: '畫筆', loLaser: '雷射（低功率）', loInfo: '{n} 筆 · 約 {t}', loNone: '沒有可以標的東西（外框要是切割類圖層，孔要被外框包住或設為「只標孔位」）',
+        stepLayout: '裝畫筆或雷射模組 → 對 Z0 → 執行；確認位置、手鑽孔位後，再換刀開始加工'
     },
     en: {
         stepLabel: 'Step 3 · Cut', title: 'CNC (cut · pocket)', lang: 'EN / 中文', advOff: 'Advanced', advOn: 'Advanced ✓',
@@ -271,7 +294,9 @@ const i18n = {
         optWidth: 'Real bit width', optOrder: 'Order', optFoot: 'Machine footprint', btnTop: 'Top view', btnFit: 'Fit',
         empty: 'Choose a file first', hint: 'Click a shape to select (Shift for more), drag to move; drag empty space to pan, wheel to zoom, double-click empty space to fit.',
         secLayer: 'Layer settings', delLayer: 'Delete layer', op: 'Operation', tool: 'Tool', depth: 'Depth', through: 'Cut through', tabs: 'Keep tabs (stop parts flying out)',
-        opProfile: 'Profile (auto inside/outside)', opOuter: 'Outside profile', opInner: 'Inside profile', opPocket: 'Pocket', opLaser: 'Laser cut',
+        opProfile: 'Profile (auto inside/outside)', opOuter: 'Outside profile', opInner: 'Inside profile', opPocket: 'Pocket', opLaser: 'Laser cut', opVcarve: 'V-carve', opEngrave: 'Engrave along lines',
+        carveSide: 'Carve which part', sideOdd: 'The shapes themselves (letters, figures)', sideEven: 'Letters inside a frame (frame stays)',
+        warnVbit: '⚠ Use a V-bit or ball nose for V-carving', warnTooWide: '⚠ The bit cannot carve this layer fully, so no toolpath was made: go deeper, use a wider or larger V-bit, or reduce the overall width',
         warnThrough: '⚠ Depth ≥ thickness: tick "Cut through" to cut through', warnBit: '⚠ Use a flat end mill for profiles and pockets', warnNoTool: '⚠ No tool selected; this layer is not output',
         confirmDelLayer: 'This layer has {n} objects. Delete them too?', hidden: 'off', objs: '{n}',
         secObj: 'Objects', selectAll: 'Select all', objHint: 'Click shapes in the preview to select; Shift for more.', objCount: '{n} selected', objLayer: 'Layer', width: 'W', height: 'H',
@@ -280,7 +305,12 @@ const i18n = {
         stepFirst: 'Install {tool} → Z0 on material surface → router dial {dial} → start spindle', stepChange: 'Stop spindle → change to {tool} → set Z0 again → router dial {dial} → start spindle',
         stepLaser: 'Mount laser module → set Z0 → safety glasses, air assist on', laserAdvice: 'Material: power {p}% · speed F{f} · {n} pass(es)', fileInfo: '{layers} · about {t}',
         warnRange: '⚠ Objects outside the machine work range', warnBoard: '⚠ Objects outside the board',
-        tableName: 'Table', front: 'Front', legendRange: 'Work range', legendBoard: 'Board', foot: 'Machine footprint 250 × 250'
+        tableName: 'Table', front: 'Front', legendRange: 'Work range', legendBoard: 'Board', foot: 'Machine footprint 250 × 250',
+        opDrill: 'Mark holes only (hand-drill)', optZone: 'Precision zone',
+        zone: 'Central precision zone: about ±0.5 mm (edges 1–2 mm; third-party review, not manufacturer data)', warnZone: 'ⓘ Some objects are outside the central precision zone',
+        layoutTitle: 'Layout file (mark positions first)', loOutline: 'Part outlines', loCross: 'Hole crosses', loNum: 'Part numbers', loHead: 'With',
+        loPen: 'Pen', loLaser: 'Laser (low power)', loInfo: '{n} strokes · about {t}', loNone: 'Nothing to mark (outlines need a cutting layer; holes must be inside an outline or set to "mark holes only")',
+        stepLayout: 'Mount the pen or laser → set Z0 → run; check positions and hand-drill holes, then change to the bit and start machining'
     }
 };
 let currentLang = localStorage.getItem('gordix-lang') || 'zh';
@@ -334,8 +364,9 @@ let editingTool = null;
 // ===== 工作（只在記憶體，重新整理清空，與舊版相同）=====
 const job = { name: 'job', thickness: stock.t, overcut: 0.3, safeZ: 2, resolution: 0.1, layers: [], objects: [] };
 const LAYER_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ec4899', '#14b8a6', '#ef4444'];
-const OPS = ['profile', 'outer', 'inner', 'pocket', 'laser'];
-const OP_KEY = { profile: 'opProfile', outer: 'opOuter', inner: 'opInner', pocket: 'opPocket', laser: 'opLaser' };
+const OPS = ['profile', 'outer', 'inner', 'pocket', 'vcarve', 'engrave', 'laser', 'drillMark'];
+const OP_KEY = { profile: 'opProfile', outer: 'opOuter', inner: 'opInner', pocket: 'opPocket', laser: 'opLaser', vcarve: 'opVcarve', engrave: 'opEngrave', drillMark: 'opDrill' };
+const isCarveOp = op => op === 'vcarve' || op === 'engrave';   // 立體雕刻：一次到深（或依刀具分層），沒有切穿
 let source = null, groupMode = 'layer', layerSeq = 0, files = [];
 let selLayerId = null;
 const selObjs = new Set();
@@ -411,6 +442,7 @@ function rebuild() {
     job.safeZ = Math.max(0.5, parseFloat($('safe-z').value) || 2);
     job.resolution = Math.max(0.05, parseFloat($('resolution').value) || 0.1);
     files = job.objects.length ? GordixCam.buildFiles(job, tools) : [];
+    buildLayout();
     renderAll();
     schedulePreview();
 }
@@ -437,8 +469,10 @@ function renderStock() {
 function layerWarnings(l) {
     const L = T(), w = [], tool = toolById(l.toolId);
     if (isRouterOp(l.op) && !tool) w.push(L.warnNoTool);
-    if (tool && isRouterOp(l.op) && tool.type !== 'flat') w.push(L.warnBit);
-    if (l.op !== 'laser' && !l.through && l.depth >= job.thickness) w.push(L.warnThrough);
+    if (tool && isRouterOp(l.op) && !isCarveOp(l.op) && tool.type !== 'flat') w.push(L.warnBit);
+    if (tool && l.op === 'vcarve' && tool.type === 'flat') w.push(L.warnVbit);
+    if (job.issues && job.issues[l.id] === 'tooWide') w.push(L.warnTooWide);
+    if (isRouterOp(l.op) && !l.through && l.depth >= job.thickness) w.push(L.warnThrough);
     return w;
 }
 
@@ -498,6 +532,10 @@ function renderLayerPanel() {
     set('lp-depth', l.through ? Math.round((job.thickness + job.overcut) * 100) / 100 : l.depth);
     $('lp-depth').disabled = l.through;
     $('lp-through').checked = l.through;
+    $('lp-through').parentElement.classList.toggle('hidden', isCarveOp(l.op));
+    $('lp-side-row').classList.toggle('hidden', l.op !== 'vcarve');
+    $('lp-side').innerHTML = [['odd', L.sideOdd], ['even', L.sideEven]].map(([v, n]) => `<option value="${v}">${n}</option>`).join('');
+    $('lp-side').value = l.carveSide || 'odd';
     $('lp-tabs-row').classList.toggle('hidden', !(router && l.through && l.op !== 'pocket'));
     $('lp-tabs').checked = l.tabs;
     $('lp-warn').innerText = layerWarnings(l).join('\n');
@@ -524,7 +562,16 @@ function toolAdviceLines(t) {
 const curLayer = () => job.layers.find(x => x.id === selLayerId);
 $('lp-name').addEventListener('input', e => { curLayer().name = e.target.value; renderLayers(); });
 $('lp-color').addEventListener('input', e => { curLayer().color = e.target.value; renderLayers(); render2D(); });
-$('lp-op').onchange = e => { const l = curLayer(); l.op = e.target.value; if (isRouterOp(l.op) && !toolById(l.toolId)) l.toolId = firstFlat(); rebuild(); };
+$('lp-op').onchange = e => {
+    const l = curLayer();
+    l.op = e.target.value;
+    // 雕刻預設換成 V 刀，輪廓 / 挖槽換回平刀（使用者之後還可以自己改）
+    const t = toolById(l.toolId), carveTool = tools.find(x => x.type !== 'flat');
+    if (isCarveOp(l.op)) { l.through = false; if ((!t || t.type === 'flat') && carveTool && l.op === 'vcarve') l.toolId = carveTool.id; }
+    else if (isRouterOp(l.op) && (!t || t.type !== 'flat')) l.toolId = firstFlat();
+    rebuild();
+};
+$('lp-side').onchange = e => { curLayer().carveSide = e.target.value; rebuild(); };
 $('lp-tool').onchange = e => { curLayer().toolId = e.target.value; rebuild(); };
 $('lp-depth').addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { curLayer().depth = v; rebuild(); } });
 $('lp-through').onchange = e => { curLayer().through = e.target.checked; rebuild(); };
@@ -648,20 +695,50 @@ $('op-board').onclick = () => {
 $('op-delete').onclick = () => { job.objects = job.objects.filter(o => !selObjs.has(o.id)); selObjs.clear(); rebuild(); };
 $('op-all').onclick = () => { job.objects.forEach(o => selObjs.add(o.id)); renderAll(); };
 
+// ===== 放樣檔（gordix-cam.js 的 layoutFile）=====
+const LAYOUT_KEY = 'gordix-layout';
+const layoutOpts = (() => { try { return Object.assign({ on: false, outlines: true, crosses: true, numbers: true, head: 'pen' }, JSON.parse(localStorage.getItem(LAYOUT_KEY)) || {}); } catch (e) { return { on: false, outlines: true, crosses: true, numbers: true, head: 'pen' }; } })();
+let layout = null;
+function buildLayout() {
+    layout = null;
+    if (!layoutOpts.on || !job.objects.length) return;
+    // 畫筆一律 S255（下筆）；雷射用材質的雕刻功率，只留痕跡不切穿
+    const la = GordixMaterials.laserAdvice(stock.material, 'engrave', stock.t);
+    layout = GordixCam.layoutFile(job, { outlines: layoutOpts.outlines, crosses: layoutOpts.crosses, numbers: layoutOpts.numbers,
+        s: layoutOpts.head === 'pen' ? 255 : (la ? la.s : 64), f: 1500 });
+}
+function renderLayoutCard() {
+    const L = T();
+    $('lo-on').checked = layoutOpts.on;
+    $('lo-outline').checked = layoutOpts.outlines; $('lo-cross').checked = layoutOpts.crosses; $('lo-num').checked = layoutOpts.numbers;
+    $('lo-head').innerHTML = `<option value="pen">${L.loPen}</option><option value="laser">${L.loLaser}</option>`;
+    $('lo-head').value = layoutOpts.head;
+    $('lo-opts').classList.toggle('hidden', !layoutOpts.on);
+    $('lo-info').innerText = !layoutOpts.on ? '' : layout ? fill(L.loInfo, { n: layout.strokes.length, t: GordixPreview.fmtTime(layout.seconds) }) : (job.objects.length ? L.loNone : '');
+}
+const saveLayout = () => { try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layoutOpts)); } catch (e) { } rebuild(); };
+$('lo-on').onchange = e => { layoutOpts.on = e.target.checked; saveLayout(); };
+[['lo-outline', 'outlines'], ['lo-cross', 'crosses'], ['lo-num', 'numbers']].forEach(([id, k]) => $(id).onchange = e => { layoutOpts[k] = e.target.checked; saveLayout(); });
+$('lo-head').onchange = e => { layoutOpts.head = e.target.value; saveLayout(); };
+const allFiles = () => (layout ? [layout] : []).concat(files);
+
 // ===== 輸出檔案 =====
 function renderFiles() {
     const L = T(), fmt = GordixPreview.fmtTime;
     let routerSeen = 0;
-    $('file-list').innerHTML = files.length ? files.map((f, i) => {
+    renderLayoutCard();
+    const list = allFiles();
+    $('file-list').innerHTML = list.length ? list.map((f, i) => {
         let step;
-        if (f.head === 'router') {
+        if (f.head === 'mark') step = L.stepLayout;
+        else if (f.head === 'router') {
             const a = adviceFor(f.tool);
             step = fill(routerSeen++ ? L.stepChange : L.stepFirst, { tool: toolName(f.tool), dial: a ? a.dial : '3' });
         } else {
             const a = GordixMaterials.laserAdvice(stock.material, 'cut', stock.t);
             step = L.stepLaser + (a ? '\n' + fill(L.laserAdvice, { p: a.pct, f: a.speed, n: a.passes }) : '');
         }
-        const layers = [...new Set(f.units.map(u => u.layerId))].map(id => (job.layers.find(l => l.id === id) || {}).name).join('、');
+        const layers = f.units ? [...new Set(f.units.map(u => u.layerId))].map(id => (job.layers.find(l => l.id === id) || {}).name).join('、') : L.layoutTitle;
         return `<div class="row p-2.5 space-y-1 cursor-default" data-file="${i}">
             <div class="flex justify-between items-center gap-2">
                 <div class="text-[12px] font-black truncate">${i + 1}. ${esc(f.name)}</div>
@@ -671,8 +748,8 @@ function renderFiles() {
             <div class="text-[10px] text-slate-500">${esc(fill(L.fileInfo, { layers, t: fmt(f.seconds) }))}</div>
         </div>`;
     }).join('') : `<div class="text-[11px] text-slate-500">${L.noFiles}</div>`;
-    $('total-time').innerText = files.length ? fill(L.total, { t: fmt(files.reduce((s, f) => s + f.seconds, 0)) }) : '';
-    $('btn-download-all').disabled = !files.length;
+    $('total-time').innerText = list.length ? fill(L.total, { t: fmt(list.reduce((s, f) => s + f.seconds, 0)) }) : '';
+    $('btn-download-all').disabled = !list.length;
 }
 
 function download(f) {
@@ -681,9 +758,9 @@ function download(f) {
     a.download = f.name;
     a.click();
 }
-$('file-list').addEventListener('click', e => { const i = e.target.dataset.dl; if (i !== undefined) download(files[+i]); });
+$('file-list').addEventListener('click', e => { const i = e.target.dataset.dl; if (i !== undefined) download(allFiles()[+i]); });
 // 依序下載，每個間隔 300 ms（瀏覽器第一次會詢問是否允許下載多個檔案）
-$('btn-download-all').onclick = () => files.forEach((f, i) => setTimeout(() => download(f), i * 300));
+$('btn-download-all').onclick = () => allFiles().forEach((f, i) => setTimeout(() => download(f), i * 300));
 
 // ===== 2D 工作台預覽 =====
 const ws = $('ws');
@@ -731,6 +808,14 @@ function render2D() {
     const isDark = document.documentElement.classList.contains('dark');
     const s = [GordixWorkspace.staticSvg({ table, board: stock, u, isDark, labels: { tableName: L.tableName, front: L.front, legendRange: L.legendRange, legendBoard: L.legendBoard } })];
     const layerOf = id => job.layers.find(l => l.id === id) || {};
+    const zone = { x: range.x / 2, y: range.y / 2 };   // 加工範圍中央、長寬各一半
+    if ($('opt-zone').checked) {
+        s.push(`<rect x="${-zone.x}" y="${-zone.y}" width="${zone.x * 2}" height="${zone.y * 2}" fill="rgba(16,185,129,0.06)" stroke="#10b981" stroke-width="1" stroke-dasharray="2 4" ${nss} pointer-events="none"/>`);
+        s.push(GordixWorkspace.svgText(-zone.x + 4 * u, zone.y - 5 * u, L.zone, 9 * u, '#10b981', 'start', 'normal'));
+    }
+    if (layout && !dragging) {
+        s.push(`<path d="${layout.strokes.map(p => pathD(p, false)).join('')}" fill="none" stroke="#a855f7" stroke-width="1.5" ${nss} pointer-events="none"/>`);
+    }
 
     // 刀路（拖曳中先不畫，放開後重算）
     if (!dragging) {
@@ -783,6 +868,7 @@ function render2D() {
         if (b.minX < -range.x || b.maxX > range.x || b.minY < -range.y || b.maxY > range.y) warns.push(['bg-red-600', L.warnRange]);
         const corners = [{ x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY }, { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY }];
         if (boardPoly && !corners.every(p => GordixTable.insidePolygon(p, boardPoly))) warns.push(['bg-amber-500', L.warnBoard]);
+        if ($('opt-zone').checked && (b.minX < -zone.x || b.maxX > zone.x || b.minY < -zone.y || b.maxY > zone.y)) warns.push(['bg-sky-600', L.warnZone]);
     }
     $('ws-warning').innerHTML = warns.map(([c, m]) => `<span class="${c} text-white text-[11px] font-bold px-3 py-1 rounded-lg shadow">${m}</span>`).join('');
 }
@@ -846,7 +932,7 @@ ws.addEventListener('pointerup', endDrag);
 ws.addEventListener('pointercancel', endDrag);
 ws.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.pow(1.1, -e.deltaY / 100)); }, { passive: false });
 ws.addEventListener('dblclick', e => { if (!e.target.closest('[data-obj]')) fitView(); });
-['opt-width', 'opt-order', 'opt-foot'].forEach(id => $(id).onchange = render2D);
+['opt-width', 'opt-order', 'opt-foot', 'opt-zone'].forEach(id => $(id).onchange = render2D);
 $('btn-fit').onclick = () => { is3d ? view3d.setTop(false) : fitView(); };
 
 // ===== 預覽：所有檔接在一起播放（每段帶自己的刀具），3D 加切削模擬 =====
@@ -924,7 +1010,7 @@ function setView(on3d) {
     ws.classList.toggle('hidden', on3d);
     $('view3d').classList.toggle('hidden', !on3d);
     $('btn-top').classList.toggle('hidden', !on3d);
-    ['opt-width', 'opt-order', 'opt-foot'].forEach(id => $(id).parentElement.classList.toggle('hidden', on3d));
+    ['opt-width', 'opt-order', 'opt-foot', 'opt-zone'].forEach(id => $(id).parentElement.classList.toggle('hidden', on3d));
     $('view-2d').classList.toggle('on', !on3d);
     $('view-3d').classList.toggle('on', on3d);
     if (on3d) {

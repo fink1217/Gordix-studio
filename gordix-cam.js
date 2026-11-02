@@ -525,11 +525,27 @@ const GordixCam = (() => {
                 ]);
             });
         }
-        return []; // 沿線雕刻、V 雕刻、浮雕、標孔位：後續步驟加入
+        if ((layer.op === 'vcarve' || layer.op === 'engrave') && typeof GordixVCarve === 'object') {
+            // 演算法在 gordix-vcarve.js（原樣搬自舊 vc.html）；每個要雕的區域 / 每個物件是一個單元，才能由中心往外排序
+            const shapes = objs.map(o => o.points);
+            if (layer.op === 'engrave') {
+                return GordixVCarve.engrave(shapes, layerDepth(job, layer), tool.step, job.resolution).map((paths, i) =>
+                    unit('path3d', [objs[i].id], nest.get(objs[i].id), [{ paths, isContour: false, linkDist: 0.1 }]));
+            }
+            const r = GordixVCarve.vcarve(shapes, {
+                d: tool.d, depth: layer.depth, vbitAngle: tool.angle || 90,
+                toolType: tool.type === 'ball' ? 'ballnose' : 'vbit', resolution: job.resolution
+            }, layer.carveSide || 'odd');
+            if (r.tooWide) (job.issues = job.issues || {})[layer.id] = 'tooWide';
+            return r.groups.map(g => unit('path3d', [objs[g.index].id], nest.get(objs[g.index].id), [{ paths: g.paths, isContour: false, linkDist: 0.1 }]));
+        }
+        return []; // 灰階浮雕、標孔位：後續步驟加入
     }
 
     // 所有顯示中的圖層 → 加工單元（沒有刀具的銑削圖層略過，由畫面提示）
+    // job.issues：{ 圖層 id: 'tooWide' }（V 刀雕不滿時不產生刀路，由畫面提示）
     function buildUnits(job, tools) {
+        job.issues = {};
         const nest = cutNesting(job);
         return job.layers.filter(l => l.visible).flatMap(layer => {
             const tool = tools.find(t => t.id === layer.toolId);
@@ -599,7 +615,88 @@ const GordixCam = (() => {
         });
     }
 
+    // --- 放樣檔：加工前用畫筆或雷射在板材上標出零件外框、孔位十字與零件編號（實測影片的用法：先確認位置、手鑽孔、標名稱） ---
+
+    // 七段顯示器樣式的單筆畫數字（與繪圖工具校準檔相同）
+    const SEG = {
+        a: [[0, 1], [1, 1]], b: [[1, 1], [1, 0.5]], c: [[1, 0.5], [1, 0]], d: [[0, 0], [1, 0]],
+        e: [[0, 0.5], [0, 0]], f: [[0, 1], [0, 0.5]], g: [[0, 0.5], [1, 0.5]]
+    };
+    const DIGIT_SEGS = ['abcdef', 'bc', 'abged', 'abgcd', 'fgbc', 'afgcd', 'afgedc', 'abc', 'abcdefg', 'abcdfg'];
+
+    // 數字 n 置中在 (cx, cy)，字高 h：回傳筆劃（每筆兩點）
+    function digitStrokes(n, cx, cy, h) {
+        const w = h / 2, gap = w * 0.6, s = String(n), x0 = cx - (s.length * w + (s.length - 1) * gap) / 2, y0 = cy - h / 2;
+        const out = [];
+        [...s].forEach((ch, i) => DIGIT_SEGS[+ch].split('').forEach(k => {
+            const [[ax, ay], [bx, by]] = SEG[k], ox = x0 + i * (w + gap);
+            out.push([{ x: ox + ax * w, y: y0 + ay * h }, { x: ox + bx * w, y: y0 + by * h }]);
+        }));
+        return out;
+    }
+
+    // opts = { outlines, crosses, numbers, s（M03 的功率；畫筆 255）, f }
+    // 外框：切割類圖層的物件原始輪廓（不做刀具補償）。十字：被包住的孔（自動內外判斷為孔、內輪廓）與「只標孔位」圖層的物件中心，
+    // 臂長 = min(10, 孔徑)。編號：最外層的零件依由上到下、由左到右編號，寫在零件左上角內側。
+    // 回傳 { name, gcode, seconds, strokes, numbers: [{ id, n }] }；沒有東西可畫時回傳 null。
+    function layoutFile(job, opts) {
+        const nest = cutNesting(job);
+        const layerOf = o => job.layers.find(l => l.id === o.layerId);
+        const objs = job.objects.filter(o => { const l = layerOf(o); return l && l.visible; });
+        const strokes = [], numbers = [];
+        objs.forEach(o => {
+            const l = layerOf(o), op = OPS[l.op] || {}, b = boundsOf(o.points);
+            const hole = l.op === 'inner' || (l.op === 'profile' && nest.get(o.id) % 2 === 1);
+            if (opts.outlines && op.cut && !hole) strokes.push(o.points);
+            if (opts.crosses && (hole || l.op === 'drillMark')) {
+                const cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2, arm = Math.min(10, Math.max(b.maxX - b.minX, b.maxY - b.minY)) / 2;
+                strokes.push([{ x: cx - arm, y: cy }, { x: cx + arm, y: cy }], [{ x: cx, y: cy - arm }, { x: cx, y: cy + arm }]);
+            }
+        });
+        if (opts.numbers) {
+            const parts = objs.filter(o => (OPS[layerOf(o).op] || {}).cut && nest.get(o.id) === 0)
+                .map(o => ({ o, b: boundsOf(o.points) }))
+                .sort((p, q) => (q.b.maxY - p.b.maxY) || (p.b.minX - q.b.minX));
+            parts.forEach((p, i) => {
+                // 寫在零件左上角內側（中間常有孔或挖槽）；零件太小就寫在中心
+                const w = p.b.maxX - p.b.minX, ht = p.b.maxY - p.b.minY, h = Math.max(3, Math.min(10, ht / 5));
+                const big = w > 6 * h && ht > 4 * h;
+                const cx = big ? p.b.minX + 2 * h : (p.b.minX + p.b.maxX) / 2, cy = big ? p.b.maxY - 1.5 * h : (p.b.minY + p.b.maxY) / 2;
+                strokes.push(...digitStrokes(i + 1, cx, cy, h));
+                numbers.push({ id: p.o.id, n: i + 1 });
+            });
+        }
+        if (!strokes.length) return null;
+        // 依最近點連起來，減少空跑；每一筆：G0 到起點 → M03 → G1 … → M05（和繪圖工具相同的格式）
+        const order = [], left = strokes.slice();
+        let cur = { x: 0, y: 0 };
+        while (left.length) {
+            let best = 0, rev = false, bd = Infinity;
+            left.forEach((s, i) => {
+                const d0 = dist(cur, s[0]), d1 = dist(cur, s[s.length - 1]);
+                if (d0 < bd) { bd = d0; best = i; rev = false; }
+                if (d1 < bd) { bd = d1; best = i; rev = true; }
+            });
+            const s = left.splice(best, 1)[0], path = rev ? s.slice().reverse() : s;
+            order.push(path);
+            cur = path[path.length - 1];
+        }
+        const fx = v => v.toFixed(3), f = opts.f || 1500;
+        const g = ['; Gordix Studio CNC - layout marks (outlines / hole crosses / part numbers)', '; Tool: laser or pen (layout marks)', 'G21', 'G90', 'G0 X0 Y0'];
+        let sec = 0, p = { x: 0, y: 0 };
+        order.forEach(path => {
+            g.push(`G0 X${fx(path[0].x)} Y${fx(path[0].y)}`, `M03 S${opts.s}`);
+            sec += dist(p, path[0]) / 2000 * 60;
+            path.slice(1).forEach((q, i) => { g.push(`G1 X${fx(q.x)} Y${fx(q.y)}${i === 0 ? ` F${f}` : ''}`); sec += dist(path[i], q) / f * 60; });
+            g.push('M05');
+            p = path[path.length - 1];
+        });
+        g.push('G0 X0 Y0');
+        return { name: `${job.name}_00_layout.gcode`, head: 'mark', gcode: g.join('\n'), seconds: sec, strokes: order, numbers };
+    }
+
     return {
+        layoutFile, digitStrokes,
         TOOLS, OPS, profilePaths, pocketPaths, isInsideOther, isPointInPolygon, boundsOf,
         makeUnit, cuttingOrder, planMoves, toGcode, estimateSeconds,
         cutNesting, layerDepth, buildUnits, buildFiles, toolLabel
