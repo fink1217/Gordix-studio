@@ -16,12 +16,13 @@ const GordixSim = (() => {
         return r => r <= R ? 0 : Infinity;
     }
 
-    // 建立模擬：範圍 = 會切到材料（Z < 0）的動作外框，外擴刀半徑 + 2 mm
+    // 建立模擬：範圍 = 會切到材料（Z < 0）的動作外框，外擴刀半徑 + 2 mm。
+    // 動作可以帶自己的刀具 m.tool（多把刀的檔接在一起模擬）；m.tool === null = 不切材料（雷射、畫筆）。
     function create(moves, tool, thickness) {
-        const R = tool.d / 2 + 2;
+        const R = moves.reduce((r, m) => Math.max(r, (m.tool && m.tool.d) || 0), tool.d) / 2 + 2;
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, px = 0, py = 0, pz = 0;
         moves.forEach(m => {
-            if (Math.min(m.z, pz) < 0) {
+            if (Math.min(m.z, pz) < 0 && m.tool !== null) {
                 minX = Math.min(minX, px, m.x); maxX = Math.max(maxX, px, m.x);
                 minY = Math.min(minY, py, m.y); maxY = Math.max(maxY, py, m.y);
             }
@@ -31,7 +32,7 @@ const GordixSim = (() => {
         minX -= R; minY -= R; maxX += R; maxY += R;
         const res = Math.max(0.1, Math.sqrt((maxX - minX) * (maxY - minY) / MAX_CELLS));
         const nx = Math.ceil((maxX - minX) / res) + 1, ny = Math.ceil((maxY - minY) / res) + 1;
-        const sim = { x0: minX, y0: minY, res, nx, ny, h: new Float32Array(nx * ny), bottom: -Math.abs(thickness), tool, prof: profile(tool), moves, done: 0, dirty: true };
+        const sim = { x0: minX, y0: minY, res, nx, ny, h: new Float32Array(nx * ny), bottom: -Math.abs(thickness), tool, moves, done: 0, dirty: true };
         return sim;
     }
 
@@ -43,9 +44,12 @@ const GordixSim = (() => {
     }
 
     // 刀尖從 a 直線走到 b（{x, y, z}）：經過範圍內每一格取最低的刀尖面
-    function carve(sim, a, b) {
+    const profiles = new WeakMap();
+    function carve(sim, a, b, tool) {
+        tool = tool || sim.tool;
         if (Math.min(a.z, b.z) >= 0) return;   // 都在材料表面以上，沒切到
-        const R = sim.tool.d / 2, res = sim.res, h = sim.h, nx = sim.nx, bottom = sim.bottom, prof = sim.prof;
+        if (!profiles.has(tool)) profiles.set(tool, profile(tool));
+        const R = tool.d / 2, res = sim.res, h = sim.h, nx = sim.nx, bottom = sim.bottom, prof = profiles.get(tool);
         const i0 = Math.max(0, Math.floor((Math.min(a.x, b.x) - R - sim.x0) / res));
         const i1 = Math.min(nx - 1, Math.ceil((Math.max(a.x, b.x) + R - sim.x0) / res));
         const j0 = Math.max(0, Math.floor((Math.min(a.y, b.y) - R - sim.y0) / res));
@@ -76,14 +80,16 @@ const GordixSim = (() => {
         if (n < sim.done || (p && (n < p.n || (n === p.n && frac < p.frac)))) reset(sim);
         sim.partial = null;
         const prev = i => i > 0 ? moves[i - 1] : { x: 0, y: 0, z: 5 };
+        const cuts = m => m.tool !== null;
         while (sim.done < n) {
-            carve(sim, prev(sim.done), moves[sim.done]);
+            const m = moves[sim.done];
+            if (cuts(m)) carve(sim, prev(sim.done), m, m.tool);
             sim.done++;
             if (deadline && (sim.done & 63) === 0 && performance.now() > deadline) return false;
         }
-        if (frac > 0 && n < moves.length) {
+        if (frac > 0 && n < moves.length && cuts(moves[n])) {
             const a = prev(n), b = moves[n];
-            carve(sim, a, { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac, z: a.z + (b.z - a.z) * frac });
+            carve(sim, a, { x: a.x + (b.x - a.x) * frac, y: a.y + (b.y - a.y) * frac, z: a.z + (b.z - a.z) * frac }, b.tool);
             sim.partial = { n, frac };
         }
         return true;

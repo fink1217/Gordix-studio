@@ -2481,7 +2481,7 @@
     }
 
     // ===== 切削模擬與動畫（共用 gordix-preview.js 的播放器、gordix-sim.js 的高度圖）=====
-    // 模擬的是「下載時會輸出的 G-code」。刀具讀檔頭「; Tool: flat D6.35 A90」，讀不到用 1/4" 平刀；板厚預設讀毛胚設定。
+    // 模擬的是「下載時會輸出的 G-code」。刀具讀 CNC 工具的檔頭「; Tool: flat end mill D6.35」，讀不到用 1/4" 平刀；板厚預設讀毛胚設定。
     const simState = { p: null, player: null, bar: null, sim: null, mesh: null, head: null, group: null, timer: 0, want: null, busy: false, drawn: 0, toolKey: '' };
     const $s = id => document.getElementById(id);
 
@@ -2491,10 +2491,12 @@
 
     // 換檔時依檔頭預填刀具與板厚
     function presetSimTool(text) {
-        const m = text.match(/Tool:\s*(flat|ball|vbit)\s+D([\d.]+)(?:\s+A([\d.]+))?/i);
-        $s('simToolType').value = m ? m[1].toLowerCase() : 'flat';
-        $s('simToolD').value = m ? m[2] : 6.35;   // 檔頭沒寫刀具時用最常見的 1/4" 刀
-        if (m && m[3]) $s('simToolA').value = m[3];
+        // CNC 工具的檔頭：「Tool: flat end mill D6.35」「Tool: ball nose D6」「Tool: V-bit 90deg D6」
+        const m = text.match(/Tool:\s*(flat end mill|ball nose|V-bit\s+([\d.]+)deg)\s+D([\d.]+)/i);
+        const kind = !m ? 'flat' : /^ball/i.test(m[1]) ? 'ball' : /^V/i.test(m[1]) ? 'vbit' : 'flat';
+        $s('simToolType').value = kind;
+        $s('simToolD').value = m ? m[3] : 6.35;   // 檔頭沒寫刀具時用最常見的 1/4" 刀
+        if (m && m[2]) $s('simToolA').value = m[2];
         $s('simThick').value = GordixTable.loadBoard().t;
     }
 
