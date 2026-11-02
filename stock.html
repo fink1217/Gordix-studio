@@ -121,8 +121,8 @@
         </main>
     </div>
 
-    <script src="gordix-table.js"></script>
-    <script src="gordix-workspace.js"></script>
+    <script src="gordix-table.js?v=6"></script>
+    <script src="gordix-workspace.js?v=6"></script>
     <script>
         const i18n = {
             zh: {
@@ -193,7 +193,6 @@
 
             $('board-on').checked = board.on;
             $('board-fields').style.opacity = board.on ? '1' : '0.4';
-            $('board-fields').style.pointerEvents = board.on ? 'auto' : 'none';
             $('board-size').innerHTML = GordixTable.BOARD_SIZES.map(s =>
                 `<option value="${s.id}">${s.id.replace('x', '×')} (${s.w} × ${s.h})</option>`).join('') +
                 `<option value="custom">${d.custom}</option>`;
@@ -201,7 +200,6 @@
             set('board-w', board.w); set('board-h', board.h); set('board-t', board.t);
             const measure = board.mode === 'measure';
             document.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('on', b.dataset.mode === board.mode));
-            ['board-size', 'board-w', 'board-h', 'board-rotate'].forEach(k => $(k).disabled = measure);
             $('measure-fields').classList.toggle('hidden', !measure);
             GordixTable.BOARD_CORNERS.forEach(bc => [0, 1].forEach(i => set(`board-${bc.id}-${i}`, board.m[bc.id][i])));
             renderSummary();
@@ -248,11 +246,16 @@
             renderPreview();
         }
 
+        // 改任何板材欄位都代表要用板材，所以順便打勾
         function update(fn) {
+            board.on = true;
             fn();
             save();
             render();
         }
+
+        // 選尺寸、改長寬、轉向：一定是「工作台正中央」模式（量測模式下也能直接改，自動切回置中）
+        const updateSize = fn => update(() => { board.mode = 'size'; fn(); });
 
         function applyLanguage() {
             const d = i18n[currentLang];
@@ -274,16 +277,17 @@
         const num = (el, min) => { const v = parseFloat(el.value); return v >= min ? v : null; };
 
         $('table-select').onchange = e => update(() => { board.table = e.target.value; });
-        $('board-on').onchange = e => update(() => { board.on = e.target.checked; });
-        $('board-size').onchange = e => update(() => {
+        $('board-on').onchange = e => { board.on = e.target.checked; save(); render(); };
+        $('board-size').onchange = e => updateSize(() => {
             const p = GordixTable.BOARD_SIZES.find(s => s.id === e.target.value);
             pickedCustom = !p;
             if (p) { board.w = p.w; board.h = p.h; }
         });
         $('board-size').addEventListener('change', () => { if (pickedCustom) $('board-w').focus(); });
-        $('board-rotate').onclick = () => update(() => { [board.w, board.h] = [board.h, board.w]; });
-        [['board-w', 'w', 1], ['board-h', 'h', 1], ['board-t', 't', 0.1]].forEach(([id, key, min]) =>
-            $(id).addEventListener('input', e => { const v = num(e.target, min); if (v !== null) update(() => { board[key] = v; }); }));
+        $('board-rotate').onclick = () => updateSize(() => { [board.w, board.h] = [board.h, board.w]; });
+        [['board-w', 'w'], ['board-h', 'h']].forEach(([id, key]) =>
+            $(id).addEventListener('input', e => { const v = num(e.target, 1); if (v !== null) updateSize(() => { board[key] = v; }); }));
+        $('board-t').addEventListener('input', e => { const v = num(e.target, 0.1); if (v !== null) update(() => { board.t = v; }); });
         document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => update(() => { board.mode = b.dataset.mode; }));
         $('board-corner-inputs').addEventListener('input', e => {
             const el = e.target;

@@ -1,4 +1,6 @@
-const CACHE_NAME = 'gordix-studio-v5';
+// 改共用 JS 時，這裡和各網頁 <script src="gordix-*.js?v=N"> 的版本號一起加 1，
+// 避免瀏覽器拿到「新網頁＋快取裡的舊共用檔」而整頁出錯。
+const CACHE_NAME = 'gordix-studio-v6';
 const ASSETS = [
   './index.html',
   './CNC.html',
@@ -27,7 +29,8 @@ const ASSETS = [
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS).catch(err => {
+      // cache: 'reload' 跳過瀏覽器的 HTTP 快取，裝進離線快取的一定是伺服器上的最新版
+      return cache.addAll(ASSETS.map((url) => new Request(url, { cache: 'reload' }))).catch(err => {
         console.warn('Some assets failed to cache during install, continuing...', err);
       });
     })
@@ -57,7 +60,9 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET') return;
 
   e.respondWith(
-    fetch(e.request).then((networkResponse) => {
+    // 同網站的檔案一律向伺服器確認是否有新版（沒變只回 304，很快），不直接用瀏覽器快取裡可能過期的舊檔
+    // （頁面導覽的 request 不能帶 init 重建，所以同網站一律用網址重新抓）
+    (new URL(e.request.url).origin === self.location.origin ? fetch(e.request.url, { cache: 'no-cache' }) : fetch(e.request)).then((networkResponse) => {
       if (networkResponse && networkResponse.status === 200) {
         const responseToCache = networkResponse.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(e.request, responseToCache));
