@@ -153,7 +153,7 @@ const GordixSim = (() => {
                 pos[k * 3 + 2] = v;
                 const t = Math.min(1, -v / depth);
                 col[k * 4] = 0.86 - 0.42 * t; col[k * 4 + 1] = 0.72 - 0.42 * t; col[k * 4 + 2] = 0.52 - 0.34 * t;
-                col[k * 4 + 3] = v <= sim.bottom + 1e-6 ? 0 : 1;
+                col[k * 4 + 3] = v <= sim.bottom + 1e-6 || (sim.contains && !sim.contains(pos[k*3],pos[k*3+1])) ? 0 : 1;
             }
             geo.attributes.position.needsUpdate = true;
             geo.attributes.color.needsUpdate = true;

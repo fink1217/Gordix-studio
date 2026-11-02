@@ -204,6 +204,21 @@ const GordixPreview = (() => {
             render();
         }
 
+        let markers=null;
+        /** 橋位標記只用來辨識，不改動模擬或刀路。 */
+        function setMarkers(points) {
+            if(markers){scene.remove(markers);markers.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});}
+            markers=new THREE.Group();
+            (points || []).forEach(p=>{
+                const shape=new THREE.SphereGeometry(Math.max(1.2,p.radius*.45),10,8);
+                const dot=new THREE.Mesh(shape,new THREE.MeshBasicMaterial({color:0xf59e0b,depthTest:false,transparent:true,opacity:.95}));
+                dot.position.set(p.x,p.y,p.z);dot.renderOrder=10;markers.add(dot);
+                const line=geometry([p.x,p.y,p.z,p.x,p.y,2]);
+                markers.add(lines(line,0xf59e0b,.9));
+            });
+            scene.add(markers);render();
+        }
+
         // 2D：正上方俯視、鎖住旋轉；3D：斜上方、可旋轉
         function setTop(on) {
             controls.enableRotate = !on;
@@ -223,7 +238,7 @@ const GordixPreview = (() => {
 
         const counts = () => ({ down: cumDown[cumDown.length - 1], travel: cumTravel[cumTravel.length - 1], doneDown: cumDown[upto] });
 
-        return { setMoves, setProgress, setSim, setTop, resize, counts, render };
+        return { setMoves, setProgress, setSim, setMarkers, setTop, resize, counts, render };
     }
 
     // 播放器：依每段進給換算時間（G0 空跑假設 F3000），播放時用 requestAnimationFrame 往前走。

@@ -45,8 +45,8 @@
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0f172a">
     <link rel="apple-touch-icon" href="icon-192.png">
-    <link rel="stylesheet" href="gordix-ui.css?v=16">
-    <script src="gordix-ui.js?v=16" defer></script>
+    <link rel="stylesheet" href="gordix-ui.css?v=18">
+    <script src="gordix-ui.js?v=18" defer></script>
 </head>
 <body data-preview-layout="fixed" data-studio-page="CNC" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-3 md:p-6 text-slate-800 dark:text-slate-200 font-sans">
 <div class="studio-shell max-w-[1600px] mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800">
@@ -118,6 +118,8 @@
                     <div data-i18n="secLayers" class="label"></div>
                     <button id="btn-add-layer" data-i18n="addLayer" class="text-[11px] font-bold text-blue-600 dark:text-blue-400"></button>
                 </div>
+                <div class="flex items-center gap-2 text-[11px]"><button id="btn-expand-layers" class="btn btn-sub" data-i18n="expandAll">全部展開</button><button id="btn-collapse-layers" class="btn btn-sub" data-i18n="collapseAll">全部收合</button></div>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400" data-i18n="layerLogic">眼睛：只隱藏編輯預覽；輸出勾選：決定加工內容。拖曳物件到圖層即可搬移。</p>
                 <div id="layer-list" class="space-y-1.5"></div>
             </section>
 
@@ -163,6 +165,8 @@
                 <button id="btn-undo" class="btn btn-sub disabled:opacity-40" title="Ctrl+Z" disabled>↶</button>
                 <button id="btn-redo" class="btn btn-sub disabled:opacity-40" title="Ctrl+Y" disabled>↷</button>
                 <button id="btn-top" data-i18n="btnTop" class="btn btn-sub hidden"></button>
+                <label class="flex items-center gap-1"><input type="checkbox" id="opt-stock-model" class="accent-orange-500" checked><span data-i18n="stockModel">毛胚模型</span></label>
+                <label class="flex items-center gap-1"><input type="checkbox" id="opt-tabs" class="accent-amber-500" checked><span data-i18n="tabPreview">橋位標記</span></label>
                 <button id="btn-fit" data-i18n="btnFit" class="btn btn-sub"></button>
             </div>
             <div id="preview-box" class="relative rounded-xl overflow-hidden border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950">
@@ -193,6 +197,7 @@
                     <label class="flex items-center gap-1.5 text-[11px] font-bold pb-2"><input type="checkbox" id="lp-through" class="accent-orange-500"><span data-i18n="through"></span></label>
                 </div>
                 <label id="lp-side-row" class="num-field"><span data-i18n="carveSide"></span><select id="lp-side" class="num-in"></select></label>
+                <div id="lp-tab-settings" class="hidden space-y-1"><label class="num-field"><span data-i18n="tabHeight">橋位保留厚度</span><span class="num-wrap" data-unit="mm"><input id="lp-tab-height" type="number" class="num-in" min="0.01" step="0.1"></span></label><div id="lp-tab-summary" class="text-xs font-mono text-amber-600 dark:text-amber-400"></div></div>
                 <label id="lp-tabs-row" class="flex items-center gap-1.5 text-[11px] font-bold"><input type="checkbox" id="lp-tabs" class="accent-orange-500"><span data-i18n="tabs"></span></label>
                 <div id="lp-laser-row" class="hidden space-y-2">
                     <div class="grid grid-cols-2 gap-2">
@@ -239,6 +244,16 @@
                     <div data-i18n="secFiles" class="label"></div>
                     <span id="total-time" class="text-[11px] font-mono font-bold text-orange-500"></span>
                 </div>
+                <div class="space-y-1">
+                    <label class="flex items-center gap-2 text-xs font-bold"><input type="checkbox" id="rapid-enable" class="accent-orange-500" checked><span data-i18n="rapidEnable">空切加速</span></label>
+                    <label class="num-field"><span data-i18n="rapidFeed">空切走速（獨立F）</span><span class="num-wrap" data-unit="mm/min"><input type="number" id="rapid-feed" class="num-in" min="1" max="2000" step="100" value="2000"></span></label>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400" data-i18n="rapidTip">G0 空切帶獨立 F，切削恢復刀具走速；實際速度仍受韌體上限與 G0 支援方式限制。</p>
+                </div>
+                <label class="num-field"><span data-i18n="routeMode">刀路編排</span>
+                    <select id="route-mode" class="num-in"><option value="short">雷射畫線減少空跑</option><option value="center">畫線也由中心往外</option></select>
+                </label>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400">銑削與切割仍由中心往外，只有雷射畫線自由排序。</p>
+                <div id="route-stats" class="text-xs font-mono text-slate-600 dark:text-slate-300"></div>
                 <!-- 放樣檔：加工前用畫筆或雷射標出外框、孔位十字、零件編號 -->
                 <div class="row p-2.5 space-y-1.5 cursor-default">
                     <label class="flex items-center gap-2 text-[12px] font-black"><input type="checkbox" id="lo-on" class="accent-orange-500"><span data-i18n="layoutTitle"></span></label>
@@ -263,10 +278,11 @@
 <script src="gordix-workspace.js?v=10"></script>
 <script src="gordix-import.js?v=16"></script>
 <script src="gordix-vcarve.js?v=10"></script>
-<script src="gordix-cam.js?v=16"></script>
+    <script src="gordix-route.js?v=18"></script>
+    <script src="gordix-cam.js?v=18"></script>
 <script src="gordix-materials.js?v=10"></script>
-<script src="gordix-preview.js?v=10"></script>
-<script src="gordix-sim.js?v=10"></script>
+<script src="gordix-preview.js?v=18"></script>
+<script src="gordix-sim.js?v=18"></script>
 <script>
 // CNC 加工工具：圖層決定加工方式，同一把刀同一檔、換刀分檔，檔內由機器中心往外。
 // 刀路、排序、分檔與 G-code 都在 gordix-cam.js；這裡負責畫面、擺放與預覽。
@@ -296,7 +312,7 @@ const i18n = {
         confirmDelLayer: '這個圖層有 {n} 個物件，一起刪除？', hidden: '不輸出', objs: '{n} 個',
         secObj: '物件', selectAll: '全選', objHint: '在預覽上點圖形選取，Shift 可多選。', objCount: '已選 {n} 個物件', objLayer: '圖層', width: '寬', height: '高',
         centerBoard: '移到板材中央', delObj: '刪除',
-        secFiles: '4 · 輸出檔案', downloadAll: '全部下載', download: '下載', total: '總計 {t}', noFiles: '還沒有可輸出的刀路。',
+        expandLayer:'展開或收合圖層',layerName:'圖層名稱',objectName:'物件名稱',layerObjects:'個',layerOutput:'輸出',outputLayer:'輸出此圖層',outputObject:'輸出此物件',showLayer:'顯示圖層',hideLayer:'隱藏圖層',showObject:'顯示物件',hideObject:'隱藏物件',eyeTip:'只控制編輯預覽，不影響加工與播放結果',dragLayer:'拖曳到目標圖層',pickObject:'選取物件（Shift可多選）',moveLayer:'移至圖層（套用目前選取的物件）',expandAll:'全部展開',collapseAll:'全部收合',layerLogic:'眼睛：只隱藏編輯預覽；輸出勾選：決定加工內容。拖曳物件到圖層即可搬移。',stockModel: '毛胚模型', tabPreview: '橋位標記', tabHeight: '橋位保留厚度', rapidEnable:'空切加速',rapidFeed:'空切走速（獨立F）',rapidTip:'G0 空切帶獨立 F，切削恢復刀具走速；實際速度仍受韌體上限與 G0 支援方式限制。',routeMode: '刀路編排', routeShort: '雷射畫線減少空跑', routeCenter: '畫線也由中心往外', routeDistance: '平面空跑', secFiles: '4 · 輸出檔案', downloadAll: '全部下載', download: '下載', total: '總計 {t}', noFiles: '還沒有可輸出的刀路。',
         stepFirst: '裝上 {tool} → Z0 對材料表面 → 修邊機刻度 {dial} → 開主軸', stepChange: '停主軸 → 換 {tool} → 重新對 Z0 → 修邊機刻度 {dial} → 開主軸',
         stepLaser: '裝雷射模組 → 對 Z0 → 戴護目鏡、開吹氣', laserAdvice: '材質建議：功率 {p}% · 速度 F{f} · {n} 次', fileInfo: '{layers} · 約 {t}',
         warnRange: '⚠ 有物件超出機器加工範圍', warnBoard: '⚠ 有物件超出板材',
@@ -332,7 +348,7 @@ const i18n = {
         confirmDelLayer: 'This layer has {n} objects. Delete them too?', hidden: 'off', objs: '{n}',
         secObj: 'Objects', selectAll: 'Select all', objHint: 'Click shapes in the preview to select; Shift for more.', objCount: '{n} selected', objLayer: 'Layer', width: 'W', height: 'H',
         centerBoard: 'Center on board', delObj: 'Delete',
-        secFiles: '4 · Output files', downloadAll: 'Download all', download: 'Download', total: 'Total {t}', noFiles: 'No toolpaths to output yet.',
+        expandLayer:'Expand or collapse layer',layerName:'Layer name',objectName:'Object name',layerObjects:'objects',layerOutput:'Output',outputLayer:'Output layer',outputObject:'Output object',showLayer:'Show layer',hideLayer:'Hide layer',showObject:'Show object',hideObject:'Hide object',eyeTip:'Editing visibility only; machining and playback are unchanged',dragLayer:'Drag to another layer',pickObject:'Select object (Shift adds)',moveLayer:'Move selected objects to layer',expandAll:'Expand all',collapseAll:'Collapse all',layerLogic:'Eye: editing preview only. Output: machining content. Drag objects to another layer to move.',stockModel: 'Stock model', tabPreview: 'Tab markers', tabHeight: 'Tab thickness', rapidEnable:'Rapid travel',rapidFeed:'Travel feed (separate F)',rapidTip:'G0 has its own F; cutting restores the tool feed. Actual speed depends on controller limits and G0 feed support.',routeMode: 'Routing', routeShort: 'Shorter laser line travel', routeCenter: 'Laser lines center outward', routeDistance: 'XY rapid travel', secFiles: '4 · Output files', downloadAll: 'Download all', download: 'Download', total: 'Total {t}', noFiles: 'No toolpaths to output yet.',
         stepFirst: 'Install {tool} → Z0 on material surface → router dial {dial} → start spindle', stepChange: 'Stop spindle → change to {tool} → set Z0 again → router dial {dial} → start spindle',
         stepLaser: 'Mount laser module → set Z0 → safety glasses, air assist on', laserAdvice: 'Material: power {p}% · speed F{f} · {n} pass(es)', fileInfo: '{layers} · about {t}',
         warnRange: '⚠ Objects outside the machine work range', warnBoard: '⚠ Objects outside the board',
@@ -394,7 +410,7 @@ function toolName(t) {
 let editingTool = null;
 
 // ===== 工作（只在記憶體，重新整理清空，與舊版相同）=====
-const job = { name: 'job', thickness: stock.t, overcut: 0.3, safeZ: 2, resolution: 0.1, layers: [], objects: [] };
+const job = { rapidFeed:2000, routing:localStorage.getItem('gordix-routing') || 'short', name: 'job', thickness: stock.t, overcut: 0.3, safeZ: 2, resolution: 0.1, layers: [], objects: [] };
 const LAYER_COLORS = ['#f97316', '#3b82f6', '#22c55e', '#eab308', '#a855f7', '#ec4899', '#14b8a6', '#ef4444'];
 const OPS = ['profile', 'outer', 'inner', 'pocket', 'vcarve', 'engrave', 'laserLine', 'laser', 'drillMark'];
 const OP_KEY = { profile: 'opProfile', outer: 'opOuter', inner: 'opInner', pocket: 'opPocket', laser: 'opLaser', laserLine: 'opLaserLine', vcarve: 'opVcarve', engrave: 'opEngrave', drillMark: 'opDrill' };
@@ -427,7 +443,7 @@ function autoGroup(objects=job.objects) {
 
 // ===== 復原 / 重做：每次改完存一份圖層與物件的快照（刀具庫另外存，不在這裡）=====
 const history = { stack: [], index: -1 };
-const snapshot = () => JSON.stringify({name:job.name,layers:job.layers,objects:job.objects,layerSeq,selectionRotation,sourceId:source?.id,sources:[...sources.values()].map(({data,...meta})=>meta)});
+const snapshot = () => JSON.stringify({name:job.name,routing:job.routing,rapidFeed:job.rapidFeed,layers:job.layers,objects:job.objects,layerSeq,selectionRotation,sourceId:source?.id,sources:[...sources.values()].map(({data,...meta})=>meta)});
 function commit() {
     const s = snapshot();
     if (history.stack[history.index] === s) return;
@@ -441,6 +457,7 @@ function restore(i) {
     const d = JSON.parse(history.stack[i]);
     history.index = i;
     job.layers = d.layers; job.objects = d.objects; layerSeq = d.layerSeq;
+    job.routing=d.routing || 'short';$('route-mode').value=job.routing;job.rapidFeed=d.rapidFeed || null;
     job.name=d.name || 'job'; selectionRotation=d.selectionRotation || {key:'',angle:0};
     sources.clear(); (d.sources || []).forEach(meta => sources.set(meta.id,{...meta,data:sourceData.get(meta.id)}));
     source=sources.get(d.sourceId) || [...sources.values()].at(-1) || null;
@@ -547,13 +564,14 @@ function appendPaths(paths,center,replace) {
     groups.forEach((g,i)=>g.paths.forEach(p=>{
         const index=paths.indexOf(p), prior=stable ? previous.find(o=>o.pathIndex===index) : null;
         const matrix=prior?.matrix || (replace && previous[0]?.matrix) || {a:1,b:0,c:0,d:1,e:center.x,f:center.y};
-        added.push({id:prior?.id || ++objectSeq,sourceId:source.id,pathIndex:index,closed:p.closed,layerId:prior && !oldLayers.some(l=>l.id===prior.layerId) && job.layers.some(l=>l.id===prior.layerId) ? prior.layerId : layers[i].id,
+        added.push({...prior,id:prior?.id || ++objectSeq,sourceId:source.id,pathIndex:index,closed:p.closed,layerId:prior && !oldLayers.some(l=>l.id===prior.layerId) && job.layers.some(l=>l.id===prior.layerId) ? prior.layerId : layers[i].id,
             matrix:{...matrix},groupId:prior?.groupId || null,
             points:p.points.map(q=>({x:matrix.a*q.x+matrix.c*q.y+matrix.e,y:matrix.b*q.x+matrix.d*q.y+matrix.f}))});
     }));
     job.objects.push(...added);
     if (!stable) autoGroup(added);
     selObjs.clear();selLayerId=layers[0]?.id || null;
+    if(selLayerId)expanded.add(selLayerId);
 }
 
 /** 調整來源尺寸或解析設定時，只重新處理該檔案。 */
@@ -622,65 +640,175 @@ function layerWarnings(l) {
     return w;
 }
 
+/** 圖層眼睛只控制編輯預覽，不會變更加工輸出。 */
+function objectShown(object) {
+    const layer=job.layers.find(layer=>layer.id===object.layerId);
+    return !!layer && !layer.hidden && !object.hidden;
+}
+
+/** 一個加工單元涉及被隱藏的圖形時，編輯畫面不顯示其刀路。 */
+function unitShown(unit) {
+    const layer=job.layers.find(layer=>layer.id===unit.layerId);
+    return !!layer && !layer.hidden && (unit.objectIds || []).every(id=>{
+        const object=job.objects.find(object=>object.id===id);
+        return object && objectShown(object);
+    });
+}
+
+/** 用原始物件的實際位置與形狀繪製小縮圖，長路徑只降低預覽取樣。 */
+function layerThumbnail(objects,color) {
+    if (!objects.length) return '<svg viewBox="0 0 40 32" aria-hidden="true"><path d="M8 16H32" stroke="currentColor" opacity=".25"/></svg>';
+    const box=selectionBox(objects),span=Math.max(box.maxX-box.minX,box.maxY-box.minY,1),pad=span*.12;
+    const d=objects.map(object=>{
+        const layer=job.layers.find(layer=>layer.id===object.layerId);
+        const points=GordixCam.objectPath(object,layer?.op),step=Math.max(1,Math.ceil(points.length/80));
+        const sample=points.filter((_,i)=>i%step===0 || i===points.length-1);
+        return sample.map((p,i)=>`${i?'L':'M'} ${p.x.toFixed(2)} ${(-p.y).toFixed(2)}`).join(' ')+(object.closed!==false?' Z':'');
+    }).join(' ');
+    return `<svg viewBox="${box.minX-pad} ${-box.maxY-pad} ${Math.max(box.maxX-box.minX,1)+pad*2} ${Math.max(box.maxY-box.minY,1)+pad*2}" aria-hidden="true"><path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+}
+
+/** 顯示與隱藏使用相同尺寸的向量圖示，保留按鈕文字替代。 */
+function eyeIcon(hidden) {
+    return `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2 12s3.4-7 10-7 10 7 10 7-3.4 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>${hidden?'<path d="M3 3 21 21"/>':''}</svg>`;
+}
+
 function renderLayers() {
-    const L = T();
-    $('layer-list').innerHTML = job.layers.map(l => {
-        const n = job.objects.filter(o => o.layerId === l.id).length;
-        const tool = isRouterOp(l.op) ? toolName(toolById(l.toolId)) : '';
-        const depth = isLaserOp(l.op) ? '' : (l.through ? L.through : `${l.depth} mm`);
-        const warn = layerWarnings(l).length ? '<span class="text-amber-500">⚠</span>' : '';
-        const open = expanded.has(l.id);
-        return `<div class="row p-2 flex items-center gap-2 ${l.id === selLayerId ? 'active' : ''}" data-layer="${l.id}">
-            <button data-act="expand" class="w-4 text-[10px] text-slate-500 shrink-0">${open ? '▾' : '▸'}</button>
-            <input type="checkbox" data-act="visible" ${l.visible ? 'checked' : ''} class="accent-orange-500" title="${L.hidden}">
-            <span class="w-3 h-3 rounded-sm shrink-0" style="background:${l.color}"></span>
-            <div class="min-w-0 flex-1">
-                <div class="text-[12px] font-bold truncate ${l.visible ? '' : 'opacity-50'}">${esc(l.name)} ${warn}</div>
-                ${sources.size>1 && sources.has(l.sourceId) ? `<div class="text-[10px] text-slate-500 truncate">${esc(sources.get(l.sourceId).name)}</div>` : ''}
-                <div class="text-[10px] text-slate-500 truncate">${L[OP_KEY[l.op]]}${tool ? ' · ' + tool : ''}${depth ? ' · ' + depth : ''}</div>
+    const L=T();
+    $('layer-list').innerHTML=job.layers.map(layer=>{
+        const objects=job.objects.filter(object=>object.layerId===layer.id),open=expanded.has(layer.id);
+        const tool=isRouterOp(layer.op)?toolName(toolById(layer.toolId)):'';
+        const depth=isLaserOp(layer.op)?'':layer.through?L.through:`${layer.depth} mm`;
+        return `<div class="layer-card ${layer.id===selLayerId?'active':''}" data-layer="${layer.id}">
+            <div class="layer-heading">
+                <button data-act="expand" class="layer-expand" aria-label="${L.expandLayer}" aria-expanded="${open}">${open?'▾':'▸'}</button>
+                <div class="layer-thumbnail ${layer.hidden?'is-muted':''}">${layerThumbnail(objects,layer.color)}</div>
+                <div class="layer-description"><span class="sr-only">${esc(layer.name)}</span>
+                    <input data-act="layer-name" value="${esc(layer.name)}" aria-label="${L.layerName}" class="layer-name" maxlength="80">
+                    <div class="layer-meta">${objects.length} ${L.layerObjects} · ${L[OP_KEY[layer.op]]}${depth?' · '+depth:''}</div>
+                    ${sources.size>1 && sources.has(layer.sourceId)?`<div class="layer-meta">${esc(sources.get(layer.sourceId).name)}</div>`:''}
+                    ${layerWarnings(layer).length?'<span class="text-amber-500" title="'+esc(layerWarnings(layer).join('；'))+'">⚠</span>':''}
+                </div>
+                <div class="layer-switches">
+                    <button data-act="eye-layer" class="layer-eye" title="${L.eyeTip}" aria-label="${layer.hidden?L.showLayer:L.hideLayer}" aria-pressed="${!layer.hidden}">${eyeIcon(layer.hidden)}</button>
+                    <label class="layer-output" title="${L.outputLayer}"><input type="checkbox" data-act="visible" ${layer.visible?'checked':''} aria-label="${L.outputLayer}"><span>${L.layerOutput}</span></label>
+                </div>
             </div>
-            <span class="text-[10px] text-slate-500">${fill(L.objs, { n })}</span>
-        </div>${open ? layerItems(l) : ''}`;
+            ${open?`<div class="layer-children">${layerItems(layer)}</div>`:''}
+        </div>`;
     }).join('');
 }
 
-// 展開的圖層：這一層裡的群組與單獨物件，點一下選取
-function layerItems(l) {
-    const L = T(), gNum = new Map();
-    job.objects.forEach(o => { if (o.groupId && !gNum.has(o.groupId)) gNum.set(o.groupId, gNum.size + 1); });
-    const seen = new Set(), items = [];
-    job.objects.filter(o => o.layerId === l.id).forEach(o => {
-        if (o.groupId) {
-            if (seen.has(o.groupId)) return;
-            seen.add(o.groupId);
-            const all = job.objects.filter(x => x.groupId === o.groupId);
-            items.push({ key: 'g:' + o.groupId, label: fill(L.groupItem, { n: gNum.get(o.groupId), c: all.length }), on: all.every(x => selObjs.has(x.id)) });
-        } else items.push({ key: 'o:' + o.id, label: fill(L.objItem, { n: o.id }), on: selObjs.has(o.id) });
-    });
-    return `<div class="ml-6 space-y-0.5">${items.map(it => `<button data-pick="${it.key}" class="block w-full text-left text-[11px] px-2 py-0.5 rounded hover:bg-slate-500/10 ${it.on ? 'text-yellow-500 font-bold' : ''}">${esc(it.label)}</button>`).join('')}</div>`;
+/** 每個圖層列出實際物件；群組標題仍可一次選到整個群組。 */
+function layerItems(layer) {
+    const L=T(),seen=new Set(),groups=new Map();
+    job.objects.forEach(object=>{if(object.groupId && !groups.has(object.groupId))groups.set(object.groupId,groups.size+1);});
+    return job.objects.filter(object=>object.layerId===layer.id).map(object=>{
+        let group='';
+        if (object.groupId && !seen.has(object.groupId)) {
+            seen.add(object.groupId);
+            const members=groupOf(object);
+            group=`<button class="layer-group" data-pick="g:${object.groupId}">${esc(fill(L.groupItem,{n:groups.get(object.groupId),c:members.length}))}</button>`;
+        }
+        const name=object.name || fill(L.objItem,{n:object.id});
+        return group+`<div class="layer-object ${selObjs.has(object.id)?'selected':''}" data-object-id="${object.id}">
+            <span data-drag-object="${object.id}" class="layer-drag" title="${L.dragLayer}" aria-hidden="true">⠿</span>
+            <button data-pick="o:${object.id}" class="object-thumbnail ${object.hidden?'is-muted':''}" title="${L.pickObject}">${layerThumbnail([object],layer.color)}</button>
+            <input data-act="object-name" class="object-name" value="${esc(name)}" aria-label="${L.objectName}" maxlength="80">
+            <button data-act="eye-object" class="layer-eye" title="${L.eyeTip}" aria-label="${object.hidden?L.showObject:L.hideObject}" aria-pressed="${!object.hidden}">${eyeIcon(object.hidden)}</button>
+            <input type="checkbox" data-act="output-object" ${object.enabled!==false?'checked':''} class="object-output" title="${L.outputObject}" aria-label="${L.outputObject}">
+            <select data-act="move-object" class="layer-move" title="${L.moveLayer}" aria-label="${L.moveLayer}"><option value="">↪</option>${job.layers.map(target=>`<option value="${target.id}" ${target.id===layer.id?'disabled':''}>${esc(target.name)}</option>`).join('')}</select>
+        </div>`;
+    }).join('');
 }
 
-$('layer-list').addEventListener('click', e => {
-    const pick = e.target.closest('[data-pick]');
-    if (pick) {
-        const [kind, id] = pick.dataset.pick.split(':');
-        const objs = kind === 'g' ? job.objects.filter(o => o.groupId === id) : job.objects.filter(o => o.id === +id);
-        if (!e.shiftKey) selObjs.clear();
-        objs.forEach(o => selObjs.add(o.id));
-        renderAll();
-        return;
+/** 明確搬移指定的物件；保留來源、群組、位置與輸出設定。 */
+function moveObjectsToLayer(ids,targetId) {
+    const target=job.layers.find(layer=>layer.id===targetId);
+    if (!target) return;
+    const moving=job.objects.filter(object=>ids.includes(object.id));
+    if (!moving.length || moving.every(object=>object.layerId===targetId)) return;
+    commit();moving.forEach(object=>{object.layerId=targetId;});
+    selObjs.clear();moving.forEach(object=>selObjs.add(object.id));
+    selLayerId=targetId;expanded.add(targetId);rebuild();
+}
+
+/** 名稱輸入時更新選取狀態，保留目前輸入框的焦點。 */
+function updateLayerSelectionView() {
+    $('layer-list').querySelectorAll('[data-layer]').forEach(row=>row.classList.toggle('active',row.dataset.layer===selLayerId));
+    $('layer-list').querySelectorAll('[data-object-id]').forEach(row=>row.classList.toggle('selected',selObjs.has(+row.dataset.objectId)));
+    renderLayerPanel();renderObjPanel();render2D();
+}
+
+$('layer-list').addEventListener('click',event=>{
+    if(event.target.closest('[data-drag-object]'))return;
+    const row=event.target.closest('[data-layer]');if(!row)return;
+    const layer=job.layers.find(layer=>layer.id===row.dataset.layer);
+    const element=event.target.closest('[data-act]'),action=element?.dataset.act;
+    const objectRow=event.target.closest('[data-object-id]');
+    const object=objectRow && job.objects.find(object=>object.id===+objectRow.dataset.objectId);
+    const pick=event.target.closest('[data-pick]');
+    if(action==='expand'){expanded.has(layer.id)?expanded.delete(layer.id):expanded.add(layer.id);renderLayers();return;}
+    if(action==='eye-layer'){layer.hidden=!layer.hidden;job.objects.filter(o=>o.layerId===layer.id).forEach(o=>selObjs.delete(o.id));rebuild();return;}
+    if(action==='eye-object'){object.hidden=!object.hidden;selObjs.delete(object.id);rebuild();return;}
+    if(action==='visible'){layer.visible=element.checked;rebuild();return;}
+    if(action==='output-object'){object.enabled=element.checked;rebuild();return;}
+    if(action==='move-object')return;
+    if(pick){
+        const [kind,id]=pick.dataset.pick.split(':');
+        const objects=kind==='g'?job.objects.filter(o=>o.groupId===id):job.objects.filter(o=>o.id===+id);
+        if(!event.shiftKey && !event.ctrlKey && !event.metaKey)selObjs.clear();
+        const remove=(event.shiftKey || event.ctrlKey || event.metaKey) && objects.every(o=>selObjs.has(o.id));
+        objects.forEach(o=>remove?selObjs.delete(o.id):selObjs.add(o.id));selLayerId=layer.id;renderAll();return;
     }
-    const row = e.target.closest('[data-layer]');
-    if (!row) return;
-    const l = job.layers.find(x => x.id === row.dataset.layer);
-    if (e.target.dataset.act === 'expand') { expanded.has(l.id) ? expanded.delete(l.id) : expanded.add(l.id); renderLayers(); return; }
-    if (e.target.dataset.act === 'visible') { l.visible = e.target.checked; rebuild(); return; }
-    selLayerId = l.id;
-    selObjs.clear();
-    job.objects.filter(o => o.layerId === l.id).forEach(o => selObjs.add(o.id));
+    selLayerId=layer.id;selObjs.clear();
+    (object?[object]:job.objects.filter(o=>o.layerId===layer.id)).forEach(o=>selObjs.add(o.id));
+    if(action==='layer-name' || action==='object-name'){updateLayerSelectionView();return;}
     renderAll();
 });
+$('layer-list').addEventListener('change',event=>{
+    const row=event.target.closest('[data-layer]'),objectRow=event.target.closest('[data-object-id]');
+    if(!row)return;
+    const layer=job.layers.find(layer=>layer.id===row.dataset.layer);
+    const object=objectRow && job.objects.find(object=>object.id===+objectRow.dataset.objectId);
+    if(event.target.dataset.act==='move-object'){
+        moveObjectsToLayer(selObjs.has(object.id)?[...selObjs]:[object.id],event.target.value);return;
+    }
+    if(event.target.dataset.act==='layer-name'){layer.name=event.target.value.trim() || layer.name;rebuild();}
+    if(event.target.dataset.act==='object-name'){object.name=event.target.value.trim();rebuild();}
+});
+// 使用指標拖曳而非原生 HTML 拖放，避免欄位失焦重畫時中斷拖曳。
+let layerDrag=null;
+$('layer-list').addEventListener('pointerdown',event=>{
+    const handle=event.target.closest('[data-drag-object]');if(!handle || event.button!==0)return;
+    event.preventDefault();
+    const id=+handle.dataset.dragObject;
+    layerDrag={pointer:event.pointerId,x:event.clientX,y:event.clientY,ids:selObjs.has(id)?[...selObjs]:[id],moved:false,target:null};
+    $('layer-list').setPointerCapture(event.pointerId);
+});
+$('layer-list').addEventListener('pointermove',event=>{
+    if(!layerDrag || event.pointerId!==layerDrag.pointer)return;
+    if(Math.hypot(event.clientX-layerDrag.x,event.clientY-layerDrag.y)>4)layerDrag.moved=true;
+    if(!layerDrag.moved)return;
+    const row=document.elementFromPoint(event.clientX,event.clientY)?.closest('#layer-list [data-layer]');
+    layerDrag.target=row?.dataset.layer || null;
+    $('layer-list').querySelectorAll('.layer-drop').forEach(item=>item.classList.remove('layer-drop'));
+    if(row)row.classList.add('layer-drop');
+    const side=$('layer-list').closest('.studio-sidebar'),box=side.getBoundingClientRect();
+    if(event.clientY>box.bottom-35)side.scrollTop+=15;
+    if(event.clientY<box.top+35)side.scrollTop-=15;
+});
+function endLayerDrag(event){
+    if(!layerDrag || event.pointerId!==layerDrag.pointer)return;
+    const drag=layerDrag;layerDrag=null;
+    $('layer-list').querySelectorAll('.layer-drop').forEach(row=>row.classList.remove('layer-drop'));
+    if(event.type==='pointerup' && drag.moved && drag.target)moveObjectsToLayer(drag.ids,drag.target);
+}
+$('layer-list').addEventListener('pointerup',endLayerDrag);
+$('layer-list').addEventListener('pointercancel',endLayerDrag);
 
+$('btn-expand-layers').onclick=()=>{job.layers.forEach(layer=>expanded.add(layer.id));renderLayers();};
+$('btn-collapse-layers').onclick=()=>{expanded.clear();renderLayers();};
 $('btn-add-layer').onclick = () => {
     const l = { id: 'L' + (layerSeq++), key: null, name: `${T().newLayer} ${job.layers.length + 1}`, color: LAYER_COLORS[job.layers.length % LAYER_COLORS.length],
         visible: true, op: 'profile', toolId: firstFlat(), depth: 3.0, through: false, tabs: false };
@@ -721,6 +849,10 @@ function renderLayerPanel() {
     $('lp-side').value = l.carveSide || 'odd';
     $('lp-tabs-row').classList.toggle('hidden', !(router && l.through && l.op !== 'pocket'));
     $('lp-tabs').checked = l.tabs;
+    $('lp-tab-settings').classList.toggle('hidden',!(router && l.through && l.tabs && l.op!=='pocket'));
+    set('lp-tab-height',l.tabHeight ?? Math.min(2,job.thickness/2));$('lp-tab-height').max=job.thickness;
+    const markers=GordixCam.tabMarkers(files.flatMap(f=>f.units).filter(u=>u.layerId===l.id));
+    $('lp-tab-summary').innerText=markers.length ? `${markers.length} 個橋位 · Z ${markers[0].z.toFixed(2)} mm` : '';
     $('lp-warn').innerText = layerWarnings(l).join('\n');
     // 材質建議：刀具的走速、每層下刀和材質建議比較
     const tool = toolById(l.toolId), lines = [];
@@ -782,6 +914,7 @@ $('lp-tool').onchange = e => { curLayer().toolId = e.target.value; rebuild(); };
 $('lp-depth').addEventListener('change', e => { const v = parseFloat(e.target.value); if (v > 0) { curLayer().depth = v; rebuild(); } });
 $('lp-through').onchange = e => { curLayer().through = e.target.checked; rebuild(); };
 $('lp-tabs').onchange = e => { curLayer().tabs = e.target.checked; rebuild(); };
+$('lp-tab-height').addEventListener('change',e=>{const v=parseFloat(e.target.value);const valid=Number.isFinite(v)&&v>0&&v<=job.thickness;e.target.classList.toggle('calc-bad',!valid);if(valid){curLayer().tabHeight=v;rebuild();}});
 $('lp-delete').onclick = () => {
     const l = curLayer(), n = job.objects.filter(o => o.layerId === l.id).length;
     if (n && !confirm(fill(T().confirmDelLayer, { n }))) return;
@@ -943,6 +1076,12 @@ $('op-ungroup').onclick = ungroupSel;
 $('op-delete').onclick = () => { job.objects = job.objects.filter(o => !selObjs.has(o.id)); selObjs.clear(); rebuild(); };
 $('op-all').onclick = () => { job.objects.forEach(o => selObjs.add(o.id)); renderAll(); };
 
+$('rapid-enable').onchange=()=>{job.rapidFeed=$('rapid-enable').checked ? (+$('rapid-feed').value || 2000) : null;rebuild();};
+$('rapid-feed').addEventListener('change',()=>{const feed=+$('rapid-feed').value,valid=Number.isFinite(feed)&&feed>0&&feed<=2000;$('rapid-feed').classList.toggle('calc-bad',!valid);if(valid){job.rapidFeed=feed;rebuild();}});
+$('route-mode').onchange=e=>{
+    job.routing=e.target.value;localStorage.setItem('gordix-routing',job.routing);rebuild();
+};
+
 // ===== 放樣檔（gordix-cam.js 的 layoutFile）=====
 const LAYOUT_KEY = 'gordix-layout';
 const layoutOpts = (() => { try { return Object.assign({ on: false, outlines: true, crosses: true, numbers: true, head: 'pen' }, JSON.parse(localStorage.getItem(LAYOUT_KEY)) || {}); } catch (e) { return { on: false, outlines: true, crosses: true, numbers: true, head: 'pen' }; } })();
@@ -973,6 +1112,16 @@ const allFiles = () => (layout ? [layout] : []).concat(files);
 // ===== 輸出檔案 =====
 function renderFiles() {
     const L = T(), fmt = GordixPreview.fmtTime;
+    $('rapid-enable').checked=!!job.rapidFeed;$('rapid-feed').disabled=!job.rapidFeed;
+    if(job.rapidFeed&&document.activeElement!==$('rapid-feed'))$('rapid-feed').value=job.rapidFeed;
+    $('route-mode').value=job.routing;
+    $('route-mode').options[0].text=L.routeShort;$('route-mode').options[1].text=L.routeCenter;
+    const before=files.reduce((sum,f)=>sum+(f.routing?.baselineMm || 0),0);
+    const after=files.reduce((sum,f)=>sum+(f.routing?.optimizedMm || 0),0);
+    $('route-stats').innerText=files.length ? `${L.routeDistance}: ${before.toFixed(1)} → ${after.toFixed(1)} mm`+
+        (before>after+.1 ? `（−${((before-after)/before*100).toFixed(1)}%）` : '') : '';
+
+
     let routerSeen = 0;
     renderLayoutCard();
     const list = allFiles();
@@ -1057,7 +1206,7 @@ function render2D() {
     ws.setAttribute('viewBox', `${view.x} ${view.y} ${view.w} ${view.h}`);
     const u = view.w / (ws.clientWidth || 1), L = T(), nss = 'vector-effect="non-scaling-stroke"';
     const isDark = document.documentElement.classList.contains('dark');
-    const s = [GordixWorkspace.staticSvg({ table, board: stock, u, isDark, labels: { tableName: L.tableName, front: L.front, legendRange: L.legendRange, legendBoard: L.legendBoard } })];
+    const s = [GordixWorkspace.staticSvg({ table, board: {...stock,on:stock.on && $('opt-stock-model').checked}, u, isDark, labels: { tableName: L.tableName, front: L.front, legendRange: L.legendRange, legendBoard: L.legendBoard } })];
     const layerOf = id => job.layers.find(l => l.id === id) || {};
     const zone = { x: range.x / 2, y: range.y / 2 };   // 加工範圍中央、長寬各一半
     if ($('opt-zone').checked) {
@@ -1071,6 +1220,7 @@ function render2D() {
     // 刀路（拖曳中先不畫，放開後重算）
     if (!dragging) {
         files.forEach(f => f.units.forEach(un => {
+            if(!unitShown(un))return;
             const l = layerOf(un.layerId), d = f.tool ? f.tool.d : 0.3;
             const dd = un.phases.flatMap(ph => ph.paths.filter(p => p.length > 1).map(p => pathD(p, false))).join('');
             if ($('opt-width').checked) s.push(`<path d="${dd}" fill="none" stroke="${l.color}" stroke-opacity="0.22" stroke-width="${d}" stroke-linecap="round" stroke-linejoin="round" pointer-events="none"/>`);
@@ -1079,7 +1229,7 @@ function render2D() {
     }
     // 物件：大的先畫，被包住的小圖形在上面才點得到
     const area = o => { const b = selectionBox([o]); return (b.maxX - b.minX) * (b.maxY - b.minY); };
-    [...job.objects].sort((a, b) => area(b) - area(a)).forEach(o => {
+    job.objects.filter(objectShown).sort((a, b) => area(b) - area(a)).forEach(o => {
         const l = layerOf(o.layerId), sel = selObjs.has(o.id), dim = !l.visible || (selLayerId && o.layerId !== selLayerId && !sel);
         s.push(`<path data-obj="${o.id}" d="${pathD(GordixCam.objectPath(o,l.op), l.op!=='laserLine' || o.closed!==false)}" fill="${sel ? 'rgba(250,204,21,0.12)' : 'rgba(0,0,0,0.001)'}" stroke="${sel ? '#facc15' : l.color}"
             stroke-width="${sel ? 2.5 : 1.5}" stroke-opacity="${dim ? 0.35 : 1}" ${l.visible ? '' : 'stroke-dasharray="3 3"'} ${nss} style="cursor:move"/>`);
@@ -1088,14 +1238,15 @@ function render2D() {
     if ($('opt-order').checked && !dragging) {
         let n = 1;
         files.forEach(f => f.units.forEach(un => {
+            const order=n++;if(!unitShown(un))return;
             const ph = un.phases.find(p => p.paths.length && p.paths[0].length), p = ph && ph.paths[0][0];
             if (!p) return;
             s.push(`<circle cx="${p.x}" cy="${-p.y}" r="${8 * u}" fill="#ffffff" stroke="#0f172a" stroke-width="1" ${nss} pointer-events="none"/>`);
-            s.push(GordixWorkspace.svgText(p.x, -p.y + 3.5 * u, n++, 10 * u, '#0f172a'));
+            s.push(GordixWorkspace.svgText(p.x, -p.y + 3.5 * u, order, 10 * u, '#0f172a'));
         }));
     }
     // 機器底面 250 × 250（刀頭在選取物件中心時）
-    if ($('opt-foot').checked && job.objects.length) {
+    if ($('opt-foot').checked && job.objects.some(objectShown)) {
         const b = selectionBox(selObjs.size ? selected() : job.objects), cx = (b.minX + b.maxX) / 2, cy = (b.minY + b.maxY) / 2;
         s.push(`<rect x="${cx - 125}" y="${-cy - 125}" width="250" height="250" fill="rgba(239,68,68,0.06)" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="6 4" ${nss} pointer-events="none"/>`);
         s.push(GordixWorkspace.svgText(cx, -cy - 125 - 4 * u, L.foot, 10 * u, '#ef4444'));
@@ -1110,10 +1261,15 @@ function render2D() {
         const h = headAt(st);
         s.push(`<circle cx="${h.x}" cy="${-h.y}" r="${6 * u}" fill="#dc2626" ${nss} pointer-events="none"/>`);
     }
-    if (selected().length) {
-        const b=selectionBox(selected()),cx=(b.minX+b.maxX)/2;
+    if (selected().some(objectShown)) {
+        const b=selectionBox(selected().filter(objectShown)),cx=(b.minX+b.maxX)/2;
         s.push(`<line x1="${cx}" y1="${-b.maxY}" x2="${cx}" y2="${-b.maxY-28*u}" stroke="#facc15" ${nss} pointer-events="none"/>`);
         s.push(`<circle id="cnc-rotate" cx="${cx}" cy="${-b.maxY-28*u}" r="${7*u}" fill="white" stroke="#facc15" stroke-width="2" ${nss} style="cursor:grab"/>`);
+    }
+    if ($('opt-tabs').checked) {
+        GordixCam.tabMarkers(files.flatMap(f=>f.units).filter(unitShown)).forEach(marker=>{
+            s.push(`<circle data-tab-marker="1" cx="${marker.x}" cy="${-marker.y}" r="${Math.max(5*u,marker.radius)}" fill="rgba(245,158,11,.28)" stroke="#f59e0b" stroke-width="2.5" ${nss} pointer-events="none"/>`);
+        });
     }
     ws.innerHTML = s.join('');
 
@@ -1214,6 +1370,8 @@ ws.addEventListener('pointerup', endDrag);
 ws.addEventListener('pointercancel', endDrag);
 ws.addEventListener('wheel', e => { e.preventDefault(); zoomAt(e.clientX, e.clientY, Math.pow(1.1, -e.deltaY / 100)); }, { passive: false });
 ['opt-width', 'opt-order', 'opt-foot', 'opt-zone'].forEach(id => $(id).onchange = render2D);
+$('opt-tabs').onchange=()=>{syncTabMarkers();render2D();};
+$('opt-stock-model').onchange=()=>{if(simObj)simObj.group.visible=$('opt-stock-model').checked;if(view3d)view3d.render();render2D();};
 $('btn-fit').onclick = () => { is3d ? view3d.setTop(false) : fitView(); };
 
 // ===== 預覽：所有檔接在一起播放（每段帶自己的刀具），3D 加切削模擬 =====
@@ -1241,7 +1399,7 @@ function rebuildPreview() {
     $('player').classList.toggle('hidden', !merged);
     player = null; sim = null;
     if (simObj) { if (view3d) view3d.setSim(null); simObj.dispose(); simObj = null; }
-    if (!merged) { render2D(); return; }
+    if (!merged) {if(is3d)build3d();else render2D();return;}
     player = GordixPreview.Player(merged).on(s => { want = s; pump(); });
     bar = GordixPreview.PlayerBar($('player'), player, currentLang);
     if (is3d) build3d();
@@ -1255,16 +1413,47 @@ function outlines() {
     return out;
 }
 
-function build3d() {
-    if (!view3d) { view3d = GordixPreview.View3D($('view3d')); view3d.resize(); }
-    if (!merged) return;
-    view3d.setMoves(merged, outlines());
-    if (merged.moves.some(m => m.tool)) {
-        sim = GordixSim.create(merged.moves, merged.moves.find(m => m.tool).tool, stock.t);
-        simObj = GordixSim.Mesh(sim, THREE);
-        view3d.setSim(simObj);
+/** 建立完整毛胚體積；切削區域由高度圖填入，外部保留原板材。 */
+function createStockDisplay(cutSimulation) {
+    const group=new THREE.Group(),cut=cutSimulation ? GordixSim.Mesh(cutSimulation,THREE) : null;
+    if (cut) group.add(cut.group);
+    if (boardPoly) {
+        const scale=1000,polygon=points=>points.map(p=>({X:Math.round(p.x*scale),Y:Math.round(p.y*scale)}));
+        const clipper=new ClipperLib.Clipper(),tree=new ClipperLib.PolyTree();
+        clipper.AddPath(polygon(boardPoly),ClipperLib.PolyType.ptSubject,true);
+        if (cutSimulation) {
+            const {x0,y0,nx,ny,res}=cutSimulation,x1=x0+(nx-1)*res,y1=y0+(ny-1)*res;
+            clipper.AddPath(polygon([{x:x0,y:y0},{x:x1,y:y0},{x:x1,y:y1},{x:x0,y:y1}]),ClipperLib.PolyType.ptClip,true);
+        }
+        clipper.Execute(ClipperLib.ClipType.ctDifference,tree,ClipperLib.PolyFillType.pftEvenOdd,ClipperLib.PolyFillType.pftEvenOdd);
+        const outline=(path,shape)=>{path.forEach((p,i)=>{i ? shape.lineTo(p.X/scale,p.Y/scale) : shape.moveTo(p.X/scale,p.Y/scale);});shape.closePath();return shape;};
+        ClipperLib.JS.PolyTreeToExPolygons(tree).forEach(poly=>{
+            const shape=outline(poly.outer,new THREE.Shape());
+            poly.holes.forEach(hole=>shape.holes.push(outline(hole,new THREE.Path())));
+            const geometry=new THREE.ExtrudeGeometry(shape,{depth:stock.t,bevelEnabled:false,steps:1});
+            const material=new THREE.MeshLambertMaterial({color:0xd8b985,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:1,polygonOffsetUnits:1});
+            const mesh=new THREE.Mesh(geometry,material);mesh.position.z=-stock.t;group.add(mesh);
+        });
     }
+    group.visible=$('opt-stock-model').checked;
+    return {group,update(){if(cut)cut.update();},dispose(){group.traverse(o=>{if(o.geometry)o.geometry.dispose();if(o.material)o.material.dispose();});}};
 }
+
+function build3d() {
+    if (!view3d) {view3d=GordixPreview.View3D($('view3d'));view3d.resize();}
+    if(simObj){view3d.setSim(null);simObj.dispose();simObj=null;}
+    view3d.setMoves(merged || {moves:[],hasZ:true},outlines());
+    if (merged && merged.moves.some(m=>m.tool)) {
+        sim=GordixSim.create(merged.moves,merged.moves.find(m=>m.tool).tool,stock.t);
+        if(boardPoly)sim.contains=(x,y)=>GordixTable.insidePolygon({x,y},boardPoly);
+    }
+    simObj=createStockDisplay(sim);
+    view3d.setSim(simObj);syncTabMarkers();
+}
+
+/** 同一份橋位資料供2D與3D標示。 */
+function syncTabMarkers(){if(view3d)view3d.setMarkers($('opt-tabs').checked?GordixCam.tabMarkers(files.flatMap(f=>f.units)):[]);}
+
 
 function headAt(st) {
     const mv = merged.moves, a = mv[st.n - 1] || { x: 0, y: 0, z: job.safeZ }, b = mv[st.n];

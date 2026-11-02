@@ -1,0 +1,30 @@
+﻿// 刀路排序幾何回歸：不修改原資料，優化空跑但保留加工先後。
+const assert = require('node:assert/strict');
+const R = require('../gordix-route.js');
+const path = (x,y) => [{x:x-4,y:y-3},{x:x+4,y:y-3},{x:x+4,y:y+3},{x:x-4,y:y+3},{x:x-4,y:y-3}];
+const unit = (i,x,y,type='outer') => ({type,operation:type,cfg:{},objectIds:[i],phases:[{paths:[path(x,y)],linkDist:-1}]});
+const input = Array.from({length:24},(_,i)=>unit(i,(i%2 ? -1:1)*(40+i*3),(i%3-1)*40));
+const original=JSON.stringify(input);
+const before=R.distance(input);
+const out=R.optimize(input,input.map(()=>[]));
+assert.equal(out.units.length,input.length);
+assert.equal(JSON.stringify(input),original);
+assert.ok(R.distance(out.units)<before*.85,`${before} -> ${R.distance(out.units)}`);
+assert.equal(new Set(out.order).size,input.length);
+// 不能為了就近而先切外框。
+const nested=[unit(0,0,0),unit(1,100,0),unit(2,-100,0)];
+const safe=R.optimize(nested,[[1,2],[],[]]);
+assert.ok(safe.order.indexOf(0)>safe.order.indexOf(1));
+assert.ok(safe.order.indexOf(0)>safe.order.indexOf(2));
+const area=p=>p.slice(1).reduce((s,q,i)=>s+p[i].x*q.y-q.x*p[i].y,0);
+out.units.forEach(u=>assert.ok(area(u.phases[0].paths[0])>0));
+const open={type:'laser',operation:'laserLine',cfg:{},phases:[{paths:[[{x:120,y:0},{x:20,y:0}]],linkDist:-1}]};
+assert.equal(R.optimize([open],[[]]).units[0].phases[0].paths[0][0].x,20);
+const router={...open,type:'path3d',operation:'engrave'};
+assert.equal(R.optimize([router],[[]]).units[0].phases[0].paths[0][0].x,120);
+assert.deepEqual(R.optimize([],[]).units,[]);
+const big=Array.from({length:300},(_,i)=>unit(i,(i%20)*12,Math.floor(i/20)*12));
+const start=performance.now();
+assert.equal(R.optimize(big,big.map(()=>[])).units.length,300);
+assert.ok(performance.now()-start<3000);
+console.log(`PASS 空跑 ${before.toFixed(1)} -> ${R.distance(out.units).toFixed(1)} mm；依賴、方向、不可變與300物件效能通過`);

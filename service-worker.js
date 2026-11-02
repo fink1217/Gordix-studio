@@ -1,6 +1,6 @@
 // 改共用 JS 時，這裡和各網頁 <script src="gordix-*.js?v=N"> 的版本號一起加 1，
 // 避免瀏覽器拿到「新網頁＋快取裡的舊共用檔」而整頁出錯。
-const CACHE_NAME = 'gordix-studio-v16';
+const CACHE_NAME = 'gordix-studio-v18';
 const ASSETS = [
   './index.html',
   './CNC.html',
@@ -14,6 +14,7 @@ const ASSETS = [
   './gordix-workspace.js',
   './gordix-import.js',
   './gordix-cam.js',
+  './gordix-route.js',
   './gordix-regions.js',
   './gordix-objects.js',
   './gordix-preview.js',

@@ -363,6 +363,28 @@ const GordixCam = (() => {
             .map(k => k.u);
     }
 
+    /** 橋位標註取自實際加工路徑與保留高度，不依畫面猜位置。 */
+    function tabMarkers(units) {
+        return units.flatMap(unit=>{
+            if (!unit.cfg.useTab) return [];
+            const z=unit.cfg.tabTopZ ?? Math.min(0,-unit.cfg.depth+unit.cfg.step);
+            return unit.phases.filter(phase=>phase.isContour).flatMap(phase=>phase.paths.flatMap(path=>
+                getTabPointsForPath(path).map(point=>({...point,z,height:unit.cfg.tabHeight || unit.cfg.step,
+                    radius:(6+(unit.cfg.d || 0))/2,layerId:unit.layerId,objectIds:unit.objectIds}))));
+        });
+    }
+
+    /** 實際動作中的平面空跑距離；切削及垂直抬刀不混進XY距離。 */
+    function travelMm(moves) {
+        let position={x:0,y:0},length=0;
+        moves.forEach(move=>{
+            const next={x:move.x ?? position.x,y:move.y ?? position.y};
+            if (move.g===0 || move.home) length+=dist(position,next);
+            position=next;
+        });
+        return length;
+    }
+
     // 已排序的加工單元 → 動作序列。規則逐條沿用舊 CNC.html 的輸出程式。
     // 動作：{ g: 0|1, x?, y?, z?, f? } 或 { m: 'M03 S255' | 'M05' }
     function planMoves(units, safeZ) {
@@ -378,11 +400,12 @@ const GordixCam = (() => {
                     let lastPtInLayer = null;
                     phase.paths.forEach((path, pathIdx) => {
                         if (path.length < 2) return;
-                        const useTab = !isLaser && cfg.useTab && i === passes && phase.isContour;
+                        const tabTopZ=cfg.tabTopZ ?? Math.min(0,-cfg.depth+cfg.step);
+                        const useTab = !isLaser && cfg.useTab && phase.isContour && targetZ<tabTopZ-1e-8;
                         const tabLength = 6 + (cfg.d || 0); // TAB 移動長度 = 6mm + 刀具直徑
                         const tabCenters = useTab ? getTabPointsForPath(path) : [];
                         const finalPath = useTab ? insertTabsIntoPath(path, tabCenters, tabLength) : path;
-                        const tabZ = useTab ? Math.min(0, targetZ + cfg.step) : targetZ;
+                        const tabZ = useTab ? tabTopZ : targetZ;
                         // 立體路徑（V 雕刻、浮雕）每點自帶 z
                         const zAt = pt => pt.z !== undefined ? pt.z : (useTab && isPointInTab(pt, tabCenters, tabLength) ? tabZ : targetZ);
                         const start = finalPath[0], startZ = zAt(start);
@@ -415,18 +438,19 @@ const GordixCam = (() => {
     }
 
     // 動作序列 → G-code 文字。Z 與 F 只在數值改變時輸出，與舊版相同。
-    function toGcode(moves, safeZ, comments) {
+    function toGcode(moves, safeZ, comments, rapidFeed) {
+        const rapid=Number.isFinite(rapidFeed)&&rapidFeed>0 ? ` F${Math.min(2000,rapidFeed)}` : '';
         const fx = v => v.toFixed(3);
-        const out = [...comments.map(c => '; ' + c), 'G21', 'G90', `G0 Z${fx(safeZ)}`, 'G0 X0 Y0'];
+        const out = [...comments.map(c => '; ' + c), 'G21', 'G90', `G0 Z${fx(safeZ)}`, 'G0 X0 Y0'+rapid];
         let z = safeZ, f = null;
         moves.forEach(m => {
             if (m.m) { out.push(m.m); return; }
-            if (m.home) { out.push('G0 X0 Y0'); return; } // 與檔頭相同的寫法
+            if (m.home) { out.push('G0 X0 Y0'+rapid); if(rapid)f=null; return; } // 與檔頭相同的寫法
             const hasXY = m.x !== undefined;
             const zChanged = m.z !== undefined && Math.abs(m.z - z) > 0.001;
             if (!hasXY && !zChanged) return;
             if (zChanged) z = m.z;
-            if (m.g === 0) { out.push(hasXY ? `G0 X${fx(m.x)} Y${fx(m.y)}` : `G0 Z${fx(m.z)}`); return; }
+            if (m.g === 0) { out.push(hasXY ? `G0 X${fx(m.x)} Y${fx(m.y)}${rapid}` : `G0 Z${fx(m.z)}`); if(hasXY&&rapid)f=null; return; }
             let line = 'G1' + (hasXY ? ` X${fx(m.x)} Y${fx(m.y)}` : '') + (zChanged ? ` Z${fx(m.z)}` : '');
             if (m.f !== f) { line += ` F${m.f}`; f = m.f; }
             out.push(line);
@@ -435,12 +459,12 @@ const GordixCam = (() => {
     }
 
     // 預估秒數：G0 以 2000 mm/min 計，G1 以動作的 F 計（下刀 F300）
-    function estimateSeconds(moves, safeZ) {
+    function estimateSeconds(moves, safeZ, rapidFeed) {
         let p = { x: 0, y: 0, z: safeZ }, sec = 0;
         moves.forEach(m => {
             if (m.m) return;
             const q = { x: m.x ?? p.x, y: m.y ?? p.y, z: m.z ?? p.z };
-            sec += Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) / (m.g === 0 ? 2000 : m.f) * 60;
+            sec += Math.hypot(q.x - p.x, q.y - p.y, q.z - p.z) / (m.g === 0 ? rapidFeed || 2000 : m.f) * 60;
             p = q;
         });
         return sec;
@@ -486,7 +510,7 @@ const GordixCam = (() => {
     // 自動內外：只看「切割類」圖層的外框，被奇數層包住的是孔。
     // 挖槽、雕刻的框不是材料邊界，不算進去（舊版全部都算，挖槽裡的孔會被誤判成外輪廓）。
     function cutNesting(job) {
-        const isCut = o => !!(OPS[job.layers.find(l => l.id === o.layerId).op] || {}).cut;
+        const isCut = o => {const layer=job.layers.find(l=>l.id===o.layerId);return o.enabled!==false && !!layer?.visible && !!(OPS[layer.op] || {}).cut;};
         const shapes = job.objects.map(o => ({ id: o.id, points: o.points, bounds: boundsOf(o.points), cut: isCut(o) }));
         const cutters = shapes.filter(s => s.cut);
         return new Map(shapes.map(s => [s.id, cutters.filter(c => c !== s && isInsideOther(s, c)).length]));
@@ -510,7 +534,9 @@ const GordixCam = (() => {
         const base = {
             d: tool ? tool.d : 0, depth: layerDepth(job, layer), step: tool ? tool.step : 1,
             f: laser ? (layer.feed || 1000) : tool ? tool.f : (layer.feed || 1000),
-            laserPower: Math.round(pct*255/100), laserPasses: Math.max(1,Math.min(100,Math.floor(layer.laserPasses || 1))), useTab: !!(layer.through && layer.tabs),
+            tabHeight:layer.tabHeight ?? Math.min(2,job.thickness/2),
+            tabTopZ:-(job.thickness-(layer.tabHeight ?? Math.min(2,job.thickness/2))),
+            laserPower: Math.round(pct*255/100), laserPasses: Math.max(1,Math.min(100,Math.floor(layer.laserPasses || 1))), useTab: !!(layer.through && layer.tabs && layer.op!=='pocket'),
             resolution: job.resolution, overlap: (tool && tool.overlap) || 0.5
         };
         const unit = (type, objectIds, nestingDepth, phases) =>
@@ -567,7 +593,7 @@ const GordixCam = (() => {
         return job.layers.filter(l => l.visible).flatMap(layer => {
             const tool = tools.find(t => t.id === layer.toolId);
             if (OPS[layer.op].head === 'router' && !tool) return [];
-            const objs = job.objects.filter(o => o.layerId === layer.id);
+            const objs = job.objects.filter(o => o.layerId === layer.id && o.enabled!==false);
             return layerUnits(job, layer, tool, objs, nest).map(u => ({ ...u, fileKey: fileKey(layer) }));
         }).filter(u => u.phases.some(ph => ph.paths.length));
     }
@@ -627,12 +653,27 @@ const GordixCam = (() => {
         files.sort((a, b) => (a.rank - b.rank) || (a.minStage - b.minStage));
         return files.map((f, i) => {
             const comments = fileComments(f, i, files);
-            const moves = planMoves(f.units, job.safeZ);
+            const original=planMoves(f.units,job.safeZ),baselineMm=travelMm(original);
+            if (job.routing==='short' && typeof GordixRoute!=='undefined') {
+                // 雷射畫線不移除材料，才允許自由排序；銑削與切割維持中心往外。
+                const drawing=f.units.filter(unit=>unit.operation==='laserLine');
+                const cutting=f.units.filter(unit=>unit.operation!=='laserLine');
+                if (drawing.length) {
+                    const destination=cutting[0]?.phases.flatMap(phase=>phase.paths).find(path=>path.length>1)?.[0] || {x:0,y:0};
+                    const candidate=GordixRoute.optimize(drawing,[],destination);
+                    const proposed=[...candidate.units,...cutting];
+                    if (travelMm(planMoves(proposed,job.safeZ))<baselineMm-1e-6) f.units=proposed;
+                }
+            }
+            const moves=planMoves(f.units,job.safeZ);
+            const optimizedMm=travelMm(moves);
+            const routing={mode:job.routing || 'center',baselineMm,optimizedMm,
+                savedMm:baselineMm-optimizedMm, savedPct:baselineMm ? (baselineMm-optimizedMm)/baselineMm*100 : 0};
             return {
-                ...f, comments, moves,
+                ...f, comments, moves, routing,
                 name: `${job.name}_${String(i + 1).padStart(2, '0')}_${fileSlug(f)}.gcode`,
-                gcode: toGcode(moves, job.safeZ, comments),
-                seconds: estimateSeconds(moves, job.safeZ)
+                gcode: toGcode(moves, job.safeZ, comments,job.rapidFeed),
+                seconds: estimateSeconds(moves, job.safeZ,job.rapidFeed)
             };
         });
     }
@@ -664,7 +705,7 @@ const GordixCam = (() => {
     function layoutFile(job, opts) {
         const nest = cutNesting(job);
         const layerOf = o => job.layers.find(l => l.id === o.layerId);
-        const objs = job.objects.filter(o => { const l = layerOf(o); return l && l.visible; });
+        const objs = job.objects.filter(o => { const l = layerOf(o); return l && l.visible && o.enabled!==false; });
         const strokes = [], numbers = [];
         objs.forEach(o => {
             const l = layerOf(o), op = OPS[l.op] || {}, b = boundsOf(o.points);
@@ -720,7 +761,7 @@ const GordixCam = (() => {
     return {
         layoutFile, digitStrokes,
         TOOLS, OPS, objectPath, profilePaths, pocketPaths, isInsideOther, isPointInPolygon, boundsOf,
-        makeUnit, cuttingOrder, planMoves, toGcode, estimateSeconds,
+        makeUnit, cuttingOrder, tabMarkers, travelMm, planMoves, toGcode, estimateSeconds,
         cutNesting, layerDepth, buildUnits, buildFiles, toolLabel
     };
 })();
