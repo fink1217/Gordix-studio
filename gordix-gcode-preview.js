@@ -8,6 +8,8 @@ window.GordixGcodePreview = (() => {
         <button id="gcode-top" class="btn btn-sub">俯視／立體</button>
         <button id="gcode-archive-save" class="btn btn-sub">儲存刀路恢復檔</button>
         <button id="gcode-restore-edit" class="btn btn-main">恢復到主編輯區</button>
+        <button id="gcode-open-project" class="btn btn-sub">開啟專案恢復編輯</button>
+        <input id="gcode-recovery-input" type="file" accept=".json,.gordix,.svg,.gcode,.nc,.tap,.txt" multiple hidden>
         <select id="gcode-file-select" aria-label="預覽的 G-code" class="num-in" style="max-width:480px"></select></div>
         <p id="gcode-preview-note" style="font-size:13px;margin:8px 0"></p>
         <div id="gcode-preview-canvas" style="height:calc(100% - 160px);min-height:180px;position:relative"></div>
@@ -42,8 +44,8 @@ window.GordixGcodePreview = (() => {
         if(data?.format!=='gordix-gcode-recovery' || data.version!==1 || !Array.isArray(data.files) || !data.files.length)throw Error('刀路恢復檔格式無效');
         data.files.forEach(file=>{if(typeof file.name!=='string')throw Error('刀路缺少名稱');validate(file.gcode);});
         archive=JSON.parse(JSON.stringify(data));
-        el('gcode-restore-edit').disabled=!archive.editableProject && !archive.sources?.length;
-        el('gcode-restore-edit').title=el('gcode-restore-edit').disabled ? '需要附原圖的恢復檔或完整專案才能恢復編輯' : '恢復物件、圖層與可輸出的刀路';
+        el('gcode-restore-edit').disabled=false;
+        el('gcode-restore-edit').title='恢復物件、圖層與可輸出的刀路；缺少原圖時可補選檔案';
         el('gcode-file-select').replaceChildren(...archive.files.map((file,index)=>{const option=document.createElement('option');option.value=index;option.textContent=file.name;return option;}));
         el('gcode-preview-note').textContent=data.note || '原始座標直接預覽；不重新產生刀路。此檔不包含可確認的原始圖層、群組與加工設定。';
         if(!dialog.open)dialog.showModal();show(0);
@@ -52,7 +54,39 @@ window.GordixGcodePreview = (() => {
     el('gcode-close').onclick=()=>dialog.close();
     dialog.addEventListener('close',()=>player?.pause());
     el('gcode-top').onclick=()=>{top=!top;view?.setTop(top);};
-    el('gcode-restore-edit').onclick=()=>window.dispatchEvent(new CustomEvent('gordix:recover-toolpaths',{detail:archive}));
+    function chooseFiles() {
+        el('gcode-preview-note').textContent='請選擇可編輯專案 JSON；或同時選取原始 SVG 與雷射、銑刀 G-code。';
+        el('gcode-recovery-input').click();
+    }
+    el('gcode-open-project').onclick=chooseFiles;
+    el('gcode-restore-edit').onclick=()=>{
+        if(!archive.editableProject && !archive.sources?.length){chooseFiles();return;}
+        el('gcode-preview-note').textContent='正在恢復到主編輯區…';
+        window.dispatchEvent(new CustomEvent('gordix:recover-toolpaths',{detail:archive}));
+    };
+    el('gcode-recovery-input').onchange=async event=>{
+        try {
+            const inputs=[...event.target.files];if(!inputs.length)return;
+            if(inputs.reduce((sum,file)=>sum+file.size,0)>100*1024*1024)throw Error('檔案合計超過 100 MB');
+            const project=inputs.find(file=>/\.(json|gordix)$/i.test(file.name));
+            if(project) {
+                const data=JSON.parse(await project.text());
+                window.dispatchEvent(new CustomEvent('gordix:recover-toolpaths',{detail:data}));return;
+            }
+            const data=JSON.parse(JSON.stringify(archive));data.sources=data.sources || [];
+            if(inputs.filter(file=>/\.(gcode|nc|tap|txt)$/i.test(file.name)).length>=2)data.files=[];
+            for(const file of inputs) {
+                const text=await file.text();
+                const list=/\.svg$/i.test(file.name) ? data.sources : data.files;
+                const item=/\.svg$/i.test(file.name) ? {name:file.name,data:text}:{name:file.name,gcode:text};
+                const index=list.findIndex(old=>old.name===file.name);
+                if(index>=0)list[index]=item;else list.push(item);
+            }
+            el('gcode-preview-note').textContent='已讀取檔案，正在核對原圖與刀路…';
+            window.dispatchEvent(new CustomEvent('gordix:recover-toolpaths',{detail:data}));
+        }catch(error){el('gcode-preview-note').textContent=`恢復失敗：${error.message}`;}
+        finally{event.target.value='';}
+    };
     el('gcode-archive-save').onclick=()=>{
         const url=URL.createObjectURL(new Blob([JSON.stringify(archive)],{type:'application/json'}));
         const link=document.createElement('a');link.href=url;link.download='toolpaths.recovery.gordix.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);

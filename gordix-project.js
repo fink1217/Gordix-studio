@@ -131,7 +131,7 @@
     $('project-recover').onclick=async()=>{
         try{await open(previous);$('project-recover').hidden=true;}catch(error){status(error.message);}
     };
-    $('project-open').onclick=()=>$('project-input').click();
+    $('project-open').onclick=()=>{status('請在選檔視窗選擇專案 JSON 或恢復檔。');$('project-input').click();};
     let openVersion=0;
     async function loadProject(data,version=++openVersion) {
         if(version!==openVersion)return;
