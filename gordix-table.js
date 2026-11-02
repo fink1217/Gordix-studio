@@ -102,12 +102,54 @@ const GordixTable = (() => {
         return m;
     }
 
-    // 讀取板材設定 { on, m }；沒有存過時用預設值
+    // 常用板材尺寸（w 沿 X / S 邊，h 沿 Y / E 邊）；選單由 w、h 比對推出，不另外存
+    const BOARD_SIZES = [
+        { id: '4x8', w: 2440, h: 1220 },
+        { id: '3x6', w: 1820, h: 910 },
+        { id: '2x4', w: 1220, h: 610 }
+    ];
+
+    // 讀取毛胚設定 { on, mode, w, h, t, m, table }：
+    //   mode 'size' = 選尺寸、放在工作台正中央；'measure' = 用量測值三角定位。
+    //   舊資料只有量測值、沒有 mode，視為 'measure'，量過的值不會遺失；沒存過時為 4×8、厚 18 mm 置中。
+    //   table 是毛胚放在哪個工作台表格（不動 table.cfg 的 currentId，首頁才不會誤判成「未下載」）。
     function loadBoard(table) {
-        const board = { on: true, m: null };
-        try { Object.assign(board, JSON.parse(localStorage.getItem(BOARD_KEY)) || {}); } catch (e) { }
-        if (!board.m) board.m = defaultBoardMeasure(table);
+        let saved = null;
+        try { saved = JSON.parse(localStorage.getItem(BOARD_KEY)); } catch (e) { }
+        const board = Object.assign(
+            { on: true, mode: saved && saved.m ? 'measure' : 'size', w: 2440, h: 1220, t: 18, m: null, table: null },
+            saved || {});
+        if (!board.m) board.m = defaultBoardMeasure(table || boardTable(board).table);
         return board;
+    }
+
+    // 毛胚是否存過（首頁用來判斷步驟 2 是否完成）
+    function hasBoard() {
+        try { return !!localStorage.getItem(BOARD_KEY); } catch (e) { return false; }
+    }
+
+    // 毛胚所在的工作台：{ id, table, tables, configured }。
+    // 優先用毛胚記下的表格，沒有就用桌長配置目前的表格，再沒有就用表格 1。
+    function boardTable(board) {
+        const saved = load();
+        const tables = saved ? saved.tables : DEFAULTS;
+        const pick = [board && board.table, saved && saved.currentId, 1].find(id => id != null && tables[id]);
+        return { id: String(pick), table: tables[pick], tables, configured: !!saved };
+    }
+
+    // 毛胚四角（NW → NE → SE → SW，機器座標）；量測定位失敗或尺寸無效時回傳 null
+    function boardShape(table, board) {
+        if (board.mode === 'measure') return boardPolygon(table, board.m);
+        if (!(board.w > 0 && board.h > 0)) return null;
+        const x = board.w / 2, y = board.h / 2;
+        return [{ x: -x, y }, { x, y }, { x, y: -y }, { x: -x, y: -y }];
+    }
+
+    // 毛胚中心；無法定位時為機器中心
+    function boardMid(table, board) {
+        const poly = boardShape(table, board);
+        if (!poly) return { x: 0, y: 0 };
+        return { x: poly.reduce((s, p) => s + p.x, 0) / 4, y: poly.reduce((s, p) => s + p.y, 0) / 4 };
     }
 
     function saveBoard(board) {
@@ -132,11 +174,6 @@ const GordixTable = (() => {
         return order.every(k => p[k]) ? order.map(k => p[k]) : null;
     }
 
-    function boardCenter(table, m) {
-        const poly = boardPolygon(table, m);
-        if (!poly) return { x: 0, y: 0 };
-        return { x: poly.reduce((s, p) => s + p.x, 0) / 4, y: poly.reduce((s, p) => s + p.y, 0) / 4 };
-    }
 
     function insidePolygon(pt, poly) {
         let inside = false;
@@ -149,6 +186,7 @@ const GordixTable = (() => {
 
     return {
         DEFAULTS, load, save, markConfigured, workRange, corners, locate,
-        BOARD_CORNERS, defaultBoardMeasure, loadBoard, saveBoard, boardCorners, boardPolygon, boardCenter, insidePolygon
+        BOARD_CORNERS, BOARD_SIZES, defaultBoardMeasure, loadBoard, saveBoard, hasBoard, boardTable,
+        boardCorners, boardPolygon, boardShape, boardMid, insidePolygon
     };
 })();

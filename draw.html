@@ -406,29 +406,14 @@
                     <p data-i18n="penzLimit" class="text-[9px] font-bold text-red-600 dark:text-red-400"></p>
                 </section>
 
-                <!-- 工作台：讀取桌長配置產生器存下的資料 -->
-                <section class="p-4 bg-slate-100 dark:bg-slate-950/50 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+                <!-- 毛胚：工作台與板材在「毛胚設定」頁設定，這裡只顯示摘要 -->
+                <section class="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 space-y-1">
                     <div class="flex justify-between items-center">
-                        <label id="i18n-label-table" class="text-[10px] font-black text-slate-500 dark:text-slate-400 tracking-widest">工作台</label>
-                        <a href="table_conf.html" id="i18n-link-table" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline">修改尺寸 →</a>
+                        <label data-i18n="labelStock" class="text-[10px] font-black text-amber-700 dark:text-amber-400 tracking-widest"></label>
+                        <a href="stock.html" data-i18n="linkStock" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"></a>
                     </div>
-                    <select id="table-select" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-2 rounded text-xs outline-none text-slate-800 dark:text-white"></select>
-                    <div id="table-info" class="text-[11px] font-mono text-slate-600 dark:text-slate-300 leading-relaxed"></div>
+                    <div id="stock-summary" class="text-[11px] font-mono text-slate-700 dark:text-slate-300 leading-relaxed"></div>
                     <div id="table-unset" class="hidden text-[10px] font-bold text-amber-600 dark:text-amber-400"></div>
-                </section>
-
-                <!-- 板材：實際放在工作台上的料 -->
-                <section class="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 space-y-2">
-                    <div class="flex justify-between items-center">
-                        <label id="i18n-label-board" class="text-[10px] font-black text-amber-700 dark:text-amber-400 tracking-widest">板材</label>
-                        <input type="checkbox" id="board-enable" class="w-4 h-4 accent-amber-500 rounded" checked>
-                    </div>
-                    <div id="board-fields" class="space-y-2">
-                        <p id="i18n-board-tip" class="text-[9px] text-slate-500 dark:text-slate-400">用捲尺量板材每個角到兩個治具的直線距離。N 側的兩個角量 NW、NE 治具；S 側的兩個角量 SW、SE 治具。</p>
-                        <!-- 每個板材角：兩個欄位分別是到兩個治具的距離，欄位由 JS 依 BOARD_CORNERS 產生 -->
-                        <div id="board-corner-inputs" class="space-y-2"></div>
-                        <div id="board-summary" class="text-[10px] font-mono text-amber-700 dark:text-amber-300 leading-relaxed"></div>
-                    </div>
                 </section>
 
                 <!-- 加工物件：上傳的圖案 -->
@@ -551,20 +536,18 @@
                 noData: "請上傳檔案以產生加工數據",
                 legendRange: "加工範圍",
                 legendBoard: "板材",
-                labelTable: "工作台",
-                linkTable: "修改尺寸 →",
+                labelStock: "毛胚",
+                linkStock: "毛胚設定 →",
+                stockSize: "板材",
+                stockCenter: "置中",
+                stockMeasured: "量測位置",
+                stockOff: "不使用板材",
                 tableName: "工作台",
                 tableUnset: "尚未在桌長配置產生器設定，目前使用預設尺寸",
-                labelBoard: "板材",
                 labelObject: "加工物件",
                 width: "寬",
                 height: "高",
-                boardTip: "用捲尺量板材每個角到兩個治具的直線距離。N 側的兩個角量 NW、NE 治具；S 側的兩個角量 SW、SE 治具。",
-                boardCorner: "角",
-                jig: "治具",
-                boardEdges: "板材四邊",
-                boardUnlocated: "角無法定位：兩段距離對不上（相加比兩治具間距短，或相差太多），請重新量測",
-                warnBoardInvalid: "⚠ 板材量測值無法定位，請檢查右側數值",
+                warnBoardInvalid: "⚠ 板材量測值無法定位，請到毛胚設定檢查",
                 btnObjBoard: "置中於板材",
                 btnObjOrigin: "置中於原點",
                 objTip: "X / Y 為物件中心相對機器中心的位置（+Y 朝 N 邊）。可直接在預覽中拖曳移動，拖右下角白色方塊等比例縮放。",
@@ -660,20 +643,18 @@
                 noData: "Please upload a file to generate data",
                 legendRange: "Work range",
                 legendBoard: "Board",
-                labelTable: "Table",
-                linkTable: "Edit size →",
+                labelStock: "Stock",
+                linkStock: "Stock setup →",
+                stockSize: "Board",
+                stockCenter: "centered",
+                stockMeasured: "measured position",
+                stockOff: "No board",
                 tableName: "Table",
                 tableUnset: "Not set in Table Configurator yet, using default size",
-                labelBoard: "Board",
                 labelObject: "Object",
                 width: "W",
                 height: "H",
-                boardTip: "Tape-measure the straight distance from each board corner to two jigs. The two N-side corners use the NW and NE jigs; the two S-side corners use the SW and SE jigs.",
-                boardCorner: "corner",
-                jig: "jig",
-                boardEdges: "Board edges",
-                boardUnlocated: "cannot be located: the two distances don't fit (sum shorter than the jig spacing, or too different). Please re-measure.",
-                warnBoardInvalid: "⚠ Board measurements cannot be located, check the values on the right",
+                warnBoardInvalid: "⚠ Board measurements cannot be located, check Stock setup",
                 btnObjBoard: "Center on board",
                 btnObjOrigin: "Center on origin",
                 objTip: "X / Y is the object center relative to the machine center (+Y toward side N). Drag the object in the preview to move it; drag the white corner square to scale proportionally.",
@@ -793,14 +774,9 @@
             document.getElementById('toggle-hatch').innerText = data.toggleHatch;
             document.getElementById('legend-range').innerText = data.legendRange;
             document.getElementById('legend-board').innerText = data.legendBoard;
-            document.getElementById('i18n-label-table').innerText = data.labelTable;
-            document.getElementById('i18n-link-table').innerText = data.linkTable;
-            document.getElementById('i18n-label-board').innerText = data.labelBoard;
             document.getElementById('i18n-label-object').innerText = data.labelObject;
             document.getElementById('i18n-obj-w').innerText = data.width;
             document.getElementById('i18n-obj-h').innerText = data.height;
-            document.getElementById('i18n-board-tip').innerText = data.boardTip;
-            renderBoardInputs();
             document.querySelectorAll('[data-i18n]').forEach(el => { el.innerText = data[el.dataset.i18n]; });
             renderLayerPanel();
             closeRegionMenu();
@@ -812,7 +788,6 @@
             document.getElementById('btn-obj-origin').innerText = data.btnObjOrigin;
             document.getElementById('i18n-obj-tip').innerText = data.objTip;
             document.getElementById('btn-fit-view').innerText = data.fitView;
-            renderTablePanel();
             renderWorkspace();
             document.getElementById('i18n-opt-0').innerText = data.opt0;
             document.getElementById('i18n-opt-45').innerText = data.opt45;
@@ -1049,28 +1024,19 @@
         const designInner = document.getElementById('design-inner');
         const designImage = document.getElementById('design-image');
         const designHit = document.getElementById('design-hit');
-        const tableSelect = document.getElementById('table-select');
-        const boardEnable = document.getElementById('board-enable');
 
-        const savedTables = GordixTable.load();
-        const tables = savedTables ? savedTables.tables : GordixTable.DEFAULTS;
-        let tableId = savedTables && tables[savedTables.currentId] ? String(savedTables.currentId) : '1';
-
-        // 板材以「每個角到兩個治具的直線距離」量測（三角定位），量測值記在瀏覽器裡，與 CNC 工具共用
-        const BOARD_CORNERS = GordixTable.BOARD_CORNERS;
-        const board = GordixTable.loadBoard(tables[tableId]);
-        // 以目前選取的表格計算板材位置
-        const boardCorners = () => GordixTable.boardCorners(tables[tableId], board.m);
-        const boardPolygon = () => GordixTable.boardPolygon(tables[tableId], board.m);
-        const boardCenter = () => GordixTable.boardCenter(tables[tableId], board.m);
+        // 工作台與板材（毛胚）在 stock.html 設定，存在瀏覽器裡，各工具共用；這裡唯讀
+        const board = GordixTable.loadBoard();
+        const { tables, configured: tablesConfigured } = GordixTable.boardTable(board);
+        const tableId = GordixTable.boardTable(board).id;
+        const boardPolygon = () => GordixTable.boardShape(tables[tableId], board);
+        const boardCenter = () => GordixTable.boardMid(tables[tableId], board);
         const insidePolygon = GordixTable.insidePolygon;
 
         // 加工物件中心 (mm)，以輪廓外框中心為準
         const design = { x: 0, y: 0 };
         const view = { x: 0, y: 0, w: 1, h: 1 };
         const drag = { mode: null, startClient: null, orig: null, pointers: new Map(), pinchDist: 0 };
-
-        const saveBoard = () => GordixTable.saveBoard(board);
 
         function currentWidthMm() {
             const v = parseFloat(widthInput.value);
@@ -1197,12 +1163,7 @@
         // 把目前數值寫回右側欄位（使用者正在輸入的那一格不動）
         function syncPanel() {
             const set = (id, v) => { const el = document.getElementById(id); if (document.activeElement !== el) el.value = v; };
-            boardEnable.checked = board.on;
-            BOARD_CORNERS.forEach(bc => [0, 1].forEach(i => set(`board-${bc.id}-${i}`, board.m[bc.id][i])));
-            renderBoardSummary();
-            const fields = document.getElementById('board-fields');
-            fields.style.opacity = board.on ? '1' : '0.4';
-            fields.style.pointerEvents = board.on ? 'auto' : 'none';
+            renderStockSummary();
 
             const on = !!originalImage;
             ['obj-w', 'obj-h', 'obj-x', 'obj-y', 'btn-obj-board', 'btn-obj-origin'].forEach(id => document.getElementById(id).disabled = !on);
@@ -1213,18 +1174,20 @@
             }
         }
 
-        function renderTablePanel() {
+        // 毛胚摘要：工作台、加工範圍、板材尺寸與位置
+        function renderStockSummary() {
             const d = i18n[currentLang];
-            tableSelect.innerHTML = Object.keys(tables).map(id =>
-                `<option value="${id}" ${id === tableId ? 'selected' : ''}>${d.tableName} ${id} — ${tables[id].S} × ${tables[id].W} mm</option>`).join('');
-            const r = GordixTable.workRange(tables[tableId]);
-            document.getElementById('table-info').innerText = `${d.legendRange}: ${r.x * 2} × ${r.y * 2} mm (±${r.x}, ±${r.y})`;
+            const t = tables[tableId], r = GordixTable.workRange(t);
+            const boardLine = !board.on ? d.stockOff
+                : `${d.stockSize} ${board.mode === 'measure' ? d.stockMeasured : `${board.w} × ${board.h} · ${d.stockCenter}`} · ${board.t} mm`;
+            document.getElementById('stock-summary').innerText =
+                `${d.tableName} ${tableId} · ${t.S} × ${t.W} mm
+${d.legendRange} ${r.x * 2} × ${r.y * 2} mm
+${boardLine}`;
             const unset = document.getElementById('table-unset');
             unset.innerText = d.tableUnset;
-            unset.classList.toggle('hidden', !!savedTables);
+            unset.classList.toggle('hidden', tablesConfigured);
         }
-
-        tableSelect.onchange = () => { tableId = tableSelect.value; renderTablePanel(); fitView(); };
 
         // 縮放物件：保持中心不動，依比例改輸出寬度後重算填滿線
         function scaleDesign(ratio) {
@@ -1235,38 +1198,6 @@
 
         const numVal = id => parseFloat(document.getElementById(id).value);
 
-        // 板材量測欄位：每個角兩格，分別是到兩個治具的距離
-        function renderBoardInputs() {
-            const d = i18n[currentLang];
-            document.getElementById('board-corner-inputs').innerHTML = BOARD_CORNERS.map(bc => `
-                <div>
-                    <div class="text-[10px] font-black text-amber-700 dark:text-amber-400 mb-1">${bc.id} ${d.boardCorner}</div>
-                    <div class="grid grid-cols-2 gap-2">
-                        ${bc.jigs.map((j, i) => `<label class="num-field"><span>→ ${j} ${d.jig}</span><span class="num-wrap" data-unit="mm"><input type="number" id="board-${bc.id}-${i}" data-corner="${bc.id}" data-idx="${i}" class="num-in" min="1" step="0.1"></span></label>`).join('')}
-                    </div>
-                </div>`).join('');
-        }
-        renderBoardInputs(); // 先建立欄位，主題初始化時重畫工作台會用到
-
-        // 量測結果摘要：四邊長，以及定位失敗的角
-        function renderBoardSummary() {
-            const d = i18n[currentLang];
-            const p = boardCorners();
-            const bad = BOARD_CORNERS.filter(bc => !p[bc.id]).map(bc => bc.id);
-            const len = (a, b) => (p[a] && p[b]) ? Math.hypot(p[a].x - p[b].x, p[a].y - p[b].y).toFixed(1) : '—';
-            document.getElementById('board-summary').innerText =
-                `${d.boardEdges}: N ${len('NW', 'NE')} · S ${len('SW', 'SE')} · W ${len('NW', 'SW')} · E ${len('NE', 'SE')} mm` +
-                (bad.length ? `\n⚠ ${bad.join(', ')} ${d.boardUnlocated}` : '');
-        }
-
-        document.getElementById('board-corner-inputs').addEventListener('input', (e) => {
-            const el = e.target;
-            if (!el.dataset.corner) return;
-            board.m[el.dataset.corner][parseInt(el.dataset.idx, 10)] = parseFloat(el.value) || 0;
-            saveBoard();
-            renderWorkspace();
-        });
-        boardEnable.onchange = () => { board.on = boardEnable.checked; saveBoard(); renderWorkspace(); };
 
         document.getElementById('obj-w').addEventListener('change', () => scaleDesign(numVal('obj-w') / designBoxMm().w));
         document.getElementById('obj-h').addEventListener('change', () => scaleDesign(numVal('obj-h') / designBoxMm().h));

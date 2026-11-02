@@ -1,10 +1,11 @@
-const CACHE_NAME = 'gordix-studio-v4';
+const CACHE_NAME = 'gordix-studio-v5';
 const ASSETS = [
   './index.html',
   './CNC.html',
   './draw.html',
   './Gcodetrans.html',
   './table_conf.html',
+  './stock.html',
   './vc.html',
   './params.html',
   './gordix-table.js',
