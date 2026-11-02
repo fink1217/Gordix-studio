@@ -368,11 +368,11 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const rng = (a, b) => a === b ? `${a}` : `${a}～${b}`;
 
 // ===== 毛胚與工作台（步驟 2 設定，這裡唯讀）=====
-const stock = GordixTable.loadBoard();
-const { id: tableId, table, configured: tableConfigured } = GordixTable.boardTable(stock);
-const range = GordixTable.workRange(table);
-const boardPoly = stock.on ? GordixTable.boardShape(table, stock) : null;
-const boardCenter = GordixTable.boardMid(table, stock);
+let stock = GordixTable.loadBoard();
+let { id: tableId, table, configured: tableConfigured } = GordixTable.boardTable(stock);
+let range = GordixTable.workRange(table);
+let boardPoly = stock.on ? GordixTable.boardShape(table, stock) : null;
+let boardCenter = GordixTable.boardMid(table, stock);
 
 // ===== 刀具庫（存在瀏覽器，下次沿用）=====
 const TOOLS_KEY = 'gordix-tools';
@@ -417,7 +417,7 @@ const OP_KEY = { profile: 'opProfile', outer: 'opOuter', inner: 'opInner', pocke
 const isCarveOp = op => op === 'vcarve' || op === 'engrave';   // 立體雕刻：一次到深（或依刀具分層），沒有切穿
 let source = null, groupMode = 'layer', layerSeq = 0, files = [];
 let selLayerId = null, groupSeq = 0;
-let sourceSeq=0, objectSeq=0, importBusy=false, importVersion=0;
+let sourceSeq=0, objectSeq=0, importBusy=false, importVersion=0, sourcePending=0;
 let selectionRotation={key:'',angle:0};
 const sources=new Map(), sourceData=new Map();
 const selObjs = new Set();
@@ -580,7 +580,9 @@ async function importSource(keepCenter) {
     const version=++importVersion, src=source;
     const candidate={...src,targetW:+$('target-width').value || 100,smooth:+$('smooth').value || .1,
         threshold:+$('threshold').value,groupMode};
-    const paths=await sourcePaths(candidate);
+    let paths;
+    sourcePending++;
+    try { paths=await sourcePaths(candidate); } finally { sourcePending--; }
     if (version!==importVersion || source!==src) return;
     const members=job.objects.filter(o=>o.sourceId===src.id);
     const b=members.length ? selectionBox(members) : null;
@@ -609,6 +611,7 @@ function rebuild(record = true) {
     renderAll();
     schedulePreview();
     if (record) commit();
+    window.dispatchEvent(new Event('gordix:change'));
 }
 
 function renderAll() {
@@ -1556,5 +1559,7 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => { }));
 }
 </script>
+<script src="gordix-gcode-preview.js?v=19"></script>
+<script src="gordix-project.js?v=19"></script>
 </body>
 </html>
