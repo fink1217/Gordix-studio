@@ -134,7 +134,7 @@ window.GordixRecoverImport=(()=>{
             tools:[{id:'recovered-flat',type:'flat',d:diameter,f:feed,step,flutes:2,cut:'downcut',overlap:.5}],
             sources:[],workspace:JSON.parse(JSON.stringify(workspace)),layout:{on:false,outlines:true,crosses:true,numbers:true,head:'pen'},
             counters:{layerSeq:0,groupSeq:0,sourceSeq:0,objectSeq:0},selectionRotation:{key:'',angle:0}};
-        project.workspace.stock.t=thickness;project.workspace.stock.on=false;
+        project.workspace.stock.t=thickness;project.workspace.stock.on=true;
         const job=project.job,c=project.counters;
         candidates.forEach(src=>{
             const id=++c.sourceSeq,matrix=src.fit.matrix,groupId='G'+ ++c.groupSeq;

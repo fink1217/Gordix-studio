@@ -67,6 +67,15 @@
         Object.keys(job).forEach(key=>delete job[key]);Object.assign(job,clone(data.job));
         tools=clone(data.tools);
         ({stock,tableId,table,tableConfigured}=clone(data.workspace));
+        // 舊反推檔曾強制隱藏毛胚；只恢復外框，不改變加工厚度。
+        if(job.recovery && !stock.on) {
+            if(GordixTable.hasBoard()) {
+                const current=GordixTable.loadBoard();
+                stock={...current,t:job.thickness,on:true};
+                ({id:tableId,table,configured:tableConfigured}=GordixTable.boardTable(current));
+            } else stock.on=true;
+        }
+        $('opt-stock-model').checked=true;
         range=GordixTable.workRange(table);boardPoly=stock.on ? GordixTable.boardShape(table,stock):null;
         boardCenter=GordixTable.boardMid(table,stock);
         sources.clear();sourceData.clear();
@@ -117,6 +126,7 @@
             ? '已修改橋位以外的設定：輸出改用重新計算的 CAM 刀路。'
             : files.some(file=>file.recoveryMode==='tabs') ? '已恢復可編輯專案：沿用原刀路 XY，只調整橋位高度。'
             : '已恢復可編輯專案：輸出保留原始刀路；可直接修改圖層橋位。';
+        if(job.recovery)recoveryStatus.textContent+=' 毛胚外框依目前設定或存檔尺寸顯示，原始校準尚未找回。';
         if(applying) return;
         clearTimeout(timer);timer=setTimeout(()=>{
             if(importBusy || sourcePending) return;
