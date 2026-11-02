@@ -200,7 +200,8 @@
                     <label id="i18n-label-source" class="block text-[10px] font-black text-slate-500 dark:text-slate-400 none tracking-widest mb-2">1. 圖片來源</label>
                     <div class="flex items-center gap-3">
                         <label for="file-input" class="custom-file-upload" id="i18n-btn-browse">選擇檔案</label>
-                        <input type="file" id="file-input" accept="image/*,.svg,.dxf" class="hidden">
+                        <p id="import-errors" role="alert" class="text-xs text-red-600 whitespace-pre-line"></p>
+                        <input type="file" id="file-input" multiple accept="image/*,.svg,.dxf" class="hidden">
                         <span id="file-name-display" class="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[150px]">No file chosen</span>
                     </div>
                 </section>
@@ -325,7 +326,8 @@
                     <!-- 工作台視圖：SVG 座標單位為 mm，原點為機器中心，螢幕往下為 -Y -->
                     <svg id="workspace" class="absolute inset-0 w-full h-full">
                         <g id="ws-static"></g>
-                        <g id="ws-design">
+                        <g id="ws-objects"></g>
+                            <g id="ws-design">
                             <g id="design-inner">
                                 <image id="design-image" preserveAspectRatio="none" opacity="0.5"></image>
                                 <rect id="design-hit" fill="transparent" pointer-events="all"></rect>
@@ -430,11 +432,20 @@
                 <!-- 加工物件：上傳的圖案 -->
                 <section class="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-500/20 space-y-2">
                     <label id="i18n-label-object" class="block text-[10px] font-black text-emerald-700 dark:text-emerald-400 tracking-widest">加工物件</label>
+                    <div id="object-list" class="space-y-1 max-h-44 overflow-y-auto"></div>
+                    <div class="flex flex-wrap gap-1 text-[11px]">
+                        <button id="btn-select-all" class="px-2 py-1 rounded bg-emerald-500/20">全選</button>
+                        <button id="btn-group" class="px-2 py-1 rounded bg-emerald-500/20 disabled:opacity-30">群組</button>
+                        <button id="btn-ungroup" class="px-2 py-1 rounded bg-emerald-500/20 disabled:opacity-30">解散群組</button>
+                        <button id="btn-delete-object" class="px-2 py-1 rounded bg-red-500/20 disabled:opacity-30">刪除選取</button>
+                    </div>
+                    <p id="object-selection" class="text-[10px] text-slate-500"></p>
                     <div class="grid grid-cols-2 gap-2">
                         <label class="num-field"><span id="i18n-obj-w">寬</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-w" class="num-in" min="1" step="0.1" disabled></span></label>
                         <label class="num-field"><span id="i18n-obj-h">高</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-h" class="num-in" min="1" step="0.1" disabled></span></label>
                         <label class="num-field"><span>X</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-x" class="num-in" step="0.1" disabled></span></label>
                         <label class="num-field"><span>Y</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-y" class="num-in" step="0.1" disabled></span></label>
+                        <label class="num-field col-span-2"><span>旋轉</span><span class="num-wrap" data-unit="°"><input type="number" id="obj-angle" class="num-in" step="1" value="0" disabled></span></label>
                         <button id="btn-obj-board" class="py-1.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30" disabled>置中於板材</button>
                         <button id="btn-obj-origin" class="py-1.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30" disabled>置中於原點</button>
                     </div>
@@ -511,6 +522,7 @@
     <script src="gordix-workspace.js?v=10"></script>
     <script src="gordix-import.js?v=10"></script>
     <script src="gordix-regions.js?v=10"></script>
+    <script src="gordix-objects.js?v=12"></script>
     <script src="gordix-preview.js?v=10"></script>
     <script src="gordix-materials.js?v=10"></script>
     <script>
@@ -827,7 +839,7 @@
             renderAdvancedState();
             document.getElementById('btn-obj-board').innerText = data.btnObjBoard;
             document.getElementById('btn-obj-origin').innerText = data.btnObjOrigin;
-            document.getElementById('i18n-obj-tip').innerText = data.objTip;
+            document.getElementById('i18n-obj-tip').innerText = data.objTip + (currentLang==='zh' ? ' ????? Shift ??????????????? Shift ? 15? ???????????' : ' Multi-select with checkboxes or Shift-click. Drag the round handle to rotate; Shift snaps to 15?. Positive angles turn counterclockwise.');
             document.getElementById('btn-fit-view').innerText = data.fitView;
             renderWorkspace();
             document.getElementById('i18n-opt-0').innerText = data.opt0;
@@ -835,7 +847,7 @@
             document.getElementById('i18n-opt-90').innerText = data.opt90;
             document.getElementById('i18n-opt-135').innerText = data.opt135;
             
-            if(!fileInput.files.length) {
+            if(!drawObjects.length) {
                 document.getElementById('file-name-display').innerText = data.noFile;
                 document.getElementById('coord-range').innerText = data.noData;
             }
@@ -996,6 +1008,7 @@
             if (originalImage) {
                 clearTimeout(processDebounceTimeout);
                 processDebounceTimeout = setTimeout(() => {
+                    processDebounceTimeout=0;
                     processImage();
                 }, 150);
             }
@@ -1098,9 +1111,9 @@
             btnToggleHatch.style.opacity = showHatch ? "1" : "0.4";
         }
 
-        btnToggleImg.onclick = () => { showImage = !showImage; updateLayerVisibility(); };
-        btnToggleContour.onclick = () => { showContour = !showContour; updateLayerVisibility(); };
-        btnToggleHatch.onclick = () => { showHatch = !showHatch; updateLayerVisibility(); };
+        btnToggleImg.onclick = () => { showImage = !showImage; updateLayerVisibility(); updateDesignTransform(); };
+        btnToggleContour.onclick = () => { showContour = !showContour; updateLayerVisibility(); updateDesignTransform(); };
+        btnToggleHatch.onclick = () => { showHatch = !showHatch; updateLayerVisibility(); updateDesignTransform(); };
 
         btnFormatGcode.onclick = () => { outputMode = "gcode"; updateOutputFormatUI(); };
         btnFormatSvg.onclick = () => { outputMode = "svg"; updateOutputFormatUI(); };
@@ -1126,9 +1139,181 @@
         const insidePolygon = GordixTable.insidePolygon;
 
         // 加工物件中心 (mm)，以輪廓外框中心為準
-        const design = { x: 0, y: 0 };
+        const design = { x: 0, y: 0, angle: 0 };
         const view = { x: 0, y: 0, w: 1, h: 1 };
         const drag = { mode: null, startClient: null, orig: null, pointers: new Map(), pinchDist: 0 };
+        // 場景只保存物件與成員關係；圖層分析仍由既有流程負責。
+        let drawObjects = [], selectedObjects = new Set(), activeObjectId = 0;
+        let objectSeq = 0, groupSeq = 0, sceneBusy = false, restoringScene = false;
+        let selectionAngle = 0, analysisSeq = 0, currentSourceId = 0;
+        const objectSources = new Map();
+        const objectSettings = () => [thresholdSlider, noiseSlider, smoothSlider, segmentSlider, lineWidthInput,
+            fillAngleSelect, fillSpacingInput, grayscaleFillCheckbox];
+
+        /** 保存作用中物件，不複製大型點陣遮罩或來源像素。 */
+        function saveActiveObject() {
+            const o = drawObjects.find(o => o.id === activeObjectId);
+            if (!o || !originalImage) return;
+            Object.assign(o, {x:design.x, y:design.y, angle:design.angle, width:currentWidthMm(),
+                sourceId:currentSourceId, box:designBoxPx(), pixelWidth:previewCanvas.width, pixelHeight:previewCanvas.height,
+                layers:drawLayers, overrides:regionOverrides, layerSeq, fill:fillEnable.checked,
+                settings:objectSettings().map(el => el.type === 'checkbox' ? el.checked : el.value),
+                contours:finalContours, lines:finalLines, hatch:finalFillLines,
+                image:designImage.getAttribute('href'), overlay:contourGroup.innerHTML, hatchSvg:hatchGroup.innerHTML});
+            o.source = {originalImage, originalPixelData, originalPixelWidth, originalPixelHeight, originalFileName,
+                isSvgSource, rawSvgPaths, drawRegions, regionScale, regionPenPx, image:o.image};
+            objectSources.set(o.sourceId, o.source);
+        }
+
+        /** 還原單張圖的編輯環境，切換時不影響其他圖案。 */
+        function loadObject(o) {
+            activeObjectId = o.id;
+            const src = o.source || objectSources.get(o.sourceId);
+            currentSourceId=o.sourceId;
+            ({originalImage, originalPixelData, originalPixelWidth, originalPixelHeight, originalFileName,
+                isSvgSource, rawSvgPaths, drawRegions, regionScale, regionPenPx} = src);
+            design.x=o.x; design.y=o.y; design.angle=o.angle;
+            widthInput.value=o.width; designBox=o.box;
+            previewCanvas.width=o.pixelWidth; previewCanvas.height=o.pixelHeight;
+            drawLayers=o.layers; regionOverrides=o.overrides; layerSeq=o.layerSeq; fillEnable.checked=o.fill;
+            objectSettings().forEach((el,i) => { if (el.type === 'checkbox') el.checked=o.settings[i]; else el.value=o.settings[i]; });
+            finalContours=o.contours || []; finalLines=o.lines || []; finalFillLines=o.hatch || [];
+            designImage.setAttribute('href',o.image || src.image || '');
+            designImage.setAttribute('width',o.pixelWidth); designImage.setAttribute('height',o.pixelHeight);
+            if (!isSvgSource) renderBinary();
+            fileNameDisplay.innerText=o.name;
+            applyFillUi(); renderLayerPanel(); renderOverlay();
+            thresholdValText.innerText=thresholdSlider.value;
+            noiseValText.innerText=noiseSlider.value+' px';
+            smoothText.innerText=i18n[currentLang].smoothLabels[+smoothSlider.value];
+            segmentText.innerText=segmentSlider.value+'mm';
+            closeRegionMenu();
+        }
+
+        /** 清除空場景的作用中圖案。 */
+        function clearActiveObject() {
+            activeObjectId=0; selectedObjects.clear(); originalImage=null;
+            finalContours=[]; finalLines=[]; finalFillLines=[]; drawRegions=[]; drawLayers=[]; designBox=null;
+            contourGroup.innerHTML=''; hatchGroup.innerHTML='';
+            document.getElementById('empty-state').classList.remove('hidden');
+            renderLayerPanel();
+        }
+
+        /** 選取群組時展開成員；加選可用勾選框或 Shift 點擊。 */
+        function selectObject(id, additive=false) {
+            if (sceneBusy) return;
+            if (processDebounceTimeout) {clearTimeout(processDebounceTimeout); processDebounceTimeout=0; processImage();}
+            commitDraw(); saveActiveObject();
+            const o=drawObjects.find(o => o.id===id);
+            if (!o) return;
+            const ids=drawObjects.filter(q => o.groupId ? q.groupId===o.groupId : q.id===id).map(q => q.id);
+            if (!additive) selectedObjects=new Set(ids);
+            else if (ids.every(n => selectedObjects.has(n))) ids.forEach(n => selectedObjects.delete(n));
+            else ids.forEach(n => selectedObjects.add(n));
+            const next=selectedObjects.has(id) ? o : drawObjects.find(q => selectedObjects.has(q.id));
+            if (next) loadObject(next);
+            selectionAngle=0;
+            refreshScene();
+        }
+
+        /** 回傳目前選取的成員。 */
+        function selectionObjects() { return drawObjects.filter(o => selectedObjects.has(o.id)); }
+
+        /** 將正在編輯的圖存回場景，更新所有預覽及輸出狀態。 */
+        function refreshScene() {
+            saveActiveObject(); updateDesignTransform(); renderWorkspace(); renderObjectList();
+            updateStats(); updateDownloadFileName(); scheduleGcodeView();
+            downloadBtn.disabled=sceneBusy || !hasOutput();
+            downloadBtn.className='w-full py-4 bg-emerald-600 text-white font-black rounded-xl disabled:opacity-30';
+        }
+
+        /** 產生所有圖案的世界座標路徑，預覽與匯出共用同一個轉換。 */
+        function scenePaths() {
+            saveActiveObject();
+            const result=[];
+            let rank=0;
+            drawObjects.forEach(o => {
+                const add=(pts,closed,hatch,extra={}) => result.push({...extra,
+                    pts:pts.map(p => {const q=GordixObjects.point(o,p); return {x:q.x,y:-q.y};}),
+                    isClosed:closed,isHatch:hatch,layer:rank+(extra.layer || 0),objectId:o.id});
+                (o.contours || []).forEach(p => add(p,true,false,{layer:p.layer}));
+                (o.lines || []).forEach(p => add(p,false,false,{layer:p.layer}));
+                (o.hatch || []).forEach(p => {
+                    // 灰度與工具路徑可以快取，功率必須依最新全域上下限換算。
+                    const min=+minSPowerInput.value || 0, max=+maxSPowerInput.value || 255;
+                    const powers=p.powers.map((_,i) => {
+                        const dark=p.darks ? p.darks[i] : null;
+                        return isLaserMode() ? dark===null ? max : Math.round(min+(max-min)*dark) : 255;
+                    });
+                    add(p.pts,false,true,{...p,powers});
+                });
+                rank+=o.layers.length+1;
+            });
+            return result;
+        }
+
+        /** 更新清單並用 DOM 文字節點顯示使用者檔名。 */
+        function renderObjectList() {
+            const list=document.getElementById('object-list');
+            list.replaceChildren();
+            drawObjects.forEach(o => {
+                const row=document.createElement('div'); row.dataset.object=o.id;
+                row.className='flex items-center gap-2 px-2 py-1 rounded border '+(selectedObjects.has(o.id)?'border-emerald-500 bg-emerald-500/10':'border-transparent');
+                const check=document.createElement('input'); check.type='checkbox'; check.checked=selectedObjects.has(o.id);
+                check.setAttribute('aria-label','選取 '+o.name); check.disabled=sceneBusy;
+                check.onchange=() => selectObject(o.id,true);
+                const button=document.createElement('button'); button.dataset.select=''; button.className='text-xs truncate text-left flex-1';
+                button.textContent=(o.groupId?'▣ '+o.groupId+' · ':'')+o.name;
+                button.title=o.name+'（'+o.angle.toFixed(1)+'°）'; button.disabled=sceneBusy;
+                button.onclick=e => selectObject(o.id,e.shiftKey);
+                row.append(check,button); list.append(row);
+            });
+            const selected=selectionObjects();
+            document.getElementById('object-selection').innerText=selected.length ? '已選 '+selected.length+' 個物件；圖層設定編輯目前作用中的單張圖。' : '勾選多張圖可群組；再次匯入會追加。';
+            document.getElementById('btn-group').disabled=sceneBusy || selected.length<2;
+            document.getElementById('btn-ungroup').disabled=sceneBusy || !selected.some(o => o.groupId);
+            document.getElementById('btn-delete-object').disabled=sceneBusy || !selected.length;
+            document.getElementById('btn-select-all').disabled=sceneBusy || !drawObjects.length;
+            renderUndo();
+        }
+
+        /** 在單次歷史操作內修改群組或轉換。 */
+        function changeSelection(change) {
+            if (sceneBusy || !selectedObjects.size) return;
+            clearTimeout(processDebounceTimeout); commitDraw(); saveActiveObject();
+            const objects=selectionObjects(), center=GordixObjects.bounds(objects);
+            change(objects,center);
+            const active=drawObjects.find(o => o.id===activeObjectId);
+            if (active) loadObject(active);
+            refreshScene(); commitDraw();
+        }
+
+        document.getElementById('btn-select-all').onclick=() => {
+            if (sceneBusy) return;
+            saveActiveObject(); selectedObjects=new Set(drawObjects.map(o => o.id)); selectionAngle=0; refreshScene();
+        };
+        document.getElementById('btn-group').onclick=() => changeSelection(objects => {
+            const id=++groupSeq; objects.forEach(o => {o.groupId=id;}); selectionAngle=0;
+        });
+        document.getElementById('btn-ungroup').onclick=() => changeSelection(objects => {
+            objects.forEach(o => {o.groupId=null;}); selectionAngle=0;
+        });
+        document.getElementById('btn-delete-object').onclick=() => changeSelection(() => {
+            drawObjects=drawObjects.filter(o => !selectedObjects.has(o.id));
+            selectedObjects.clear();
+            const o=drawObjects.at(-1);
+            if (o) {selectedObjects.add(o.id); loadObject(o);} else clearActiveObject();
+        });
+        document.getElementById('obj-angle').addEventListener('change',() => {
+            const angle=numVal('obj-angle');
+            if (!Number.isFinite(angle)) return;
+            changeSelection((objects,c) => {
+                const old=objects.length===1 ? objects[0].angle : selectionAngle;
+                GordixObjects.rotate(objects,c,angle-old);
+                selectionAngle=GordixObjects.normalized(angle);
+            });
+        });
+
 
         function currentWidthMm() {
             const v = parseFloat(widthInput.value);
@@ -1146,21 +1331,28 @@
 
         // 加工物件的實際尺寸與四邊位置（機器座標 mm）
         function designBoxMm() {
-            const b = designBoxPx(), k = mmPerPx();
-            const w = (b.maxX - b.minX) * k, h = (b.maxY - b.minY) * k;
-            return { w, h, left: design.x - w / 2, right: design.x + w / 2, bottom: design.y - h / 2, top: design.y + h / 2 };
+            saveActiveObject();
+            return GordixObjects.bounds(selectionObjects()) || {w:0,h:0,left:0,right:0,bottom:0,top:0,x:0,y:0};
         }
 
         function updateDesignTransform() {
+            saveActiveObject();
             wsDesign.style.display = originalImage ? '' : 'none';
+            const others=document.getElementById('ws-objects');
+            others.innerHTML=drawObjects.filter(o => o.id!==activeObjectId).map(o =>
+                `<g data-scene-object="${o.id}" transform="${GordixObjects.transform(o)}">
+                    <image href="${o.image || ''}" width="${o.pixelWidth}" height="${o.pixelHeight}" opacity="${showImage ? .5 : .08}"/>
+                    <g ${showHatch ? '' : 'display="none"'}>${o.hatchSvg}</g>
+                    <g ${showContour ? '' : 'display="none"'}>${o.overlay}</g>
+                    <rect x="${o.box.minX}" y="${o.box.minY}" width="${o.box.maxX-o.box.minX}" height="${o.box.maxY-o.box.minY}" fill="transparent" style="pointer-events:all;cursor:move"/>
+                </g>`).join('');
             if (!originalImage) return;
-            const b = designBoxPx(), k = mmPerPx();
-            designInner.setAttribute('transform',
-                `translate(${design.x} ${-design.y}) scale(${k}) translate(${-(b.minX + b.maxX) / 2} ${-(b.minY + b.maxY) / 2})`);
-            designHit.setAttribute('x', b.minX);
-            designHit.setAttribute('y', b.minY);
-            designHit.setAttribute('width', b.maxX - b.minX);
-            designHit.setAttribute('height', b.maxY - b.minY);
+            const o=drawObjects.find(o => o.id===activeObjectId);
+            const b=designBoxPx();
+            if (o) designInner.setAttribute('transform',GordixObjects.transform(o));
+            designHit.setAttribute('x',b.minX); designHit.setAttribute('y',b.minY);
+            designHit.setAttribute('width',Math.max(.01,b.maxX-b.minX));
+            designHit.setAttribute('height',Math.max(.01,b.maxY-b.minY));
         }
 
         function fitView() {
@@ -1222,19 +1414,27 @@
             // 加工物件外框、尺寸與縮放把手
             const warnings = [];
             if (board.on && !poly) warnings.push(['bg-amber-500', d.warnBoardInvalid]);
-            if (originalImage) {
-                const b = designBoxMm();
-                const yOff = penYOffset();
-                const outRange = b.left < -range.x || b.right > range.x || b.bottom + yOff < -range.y || b.top + yOff > range.y;
-                const boxCorners = [{ x: b.left, y: b.top }, { x: b.right, y: b.top }, { x: b.right, y: b.bottom }, { x: b.left, y: b.bottom }];
-                const outBoard = !!poly && !boxCorners.every(p => insidePolygon(p, poly));
-                if (outRange) warnings.push(['bg-red-600', d.warnRange]);
-                if (outBoard) warnings.push(['bg-amber-500', d.warnBoard]);
-                const color = outRange ? '#dc2626' : '#10b981';
-                m.push(`<rect x="${b.left}" y="${-b.top}" width="${b.w}" height="${b.h}" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 3" ${nss}/>`);
-                m.push(GordixWorkspace.svgText(design.x, -b.top - 6 * u, `${b.w.toFixed(1)} × ${b.h.toFixed(1)} mm`, fs, color));
-                const hsz = 10 * u;
-                m.push(`<rect id="design-handle" x="${b.right - hsz / 2}" y="${-b.bottom - hsz / 2}" width="${hsz}" height="${hsz}" fill="#ffffff" stroke="${color}" stroke-width="2" ${nss} style="cursor: nwse-resize; pointer-events: all"/>`);
+            if (drawObjects.length) {
+                saveActiveObject();
+                const yOff=penYOffset();
+                const outRange=drawObjects.some(o => GordixObjects.corners(o).some(p => Math.abs(p.x)>range.x || Math.abs(p.y+yOff)>range.y));
+                const outBoard=!!poly && drawObjects.some(o => !GordixObjects.corners(o).every(p => insidePolygon(p,poly)));
+                if (outRange) warnings.push(['bg-red-600',d.warnRange]);
+                if (outBoard) warnings.push(['bg-amber-500',d.warnBoard]);
+                drawObjects.forEach(o => {
+                    const points=GordixObjects.corners(o).map(p => `${p.x},${-p.y}`).join(' ');
+                    const color=selectedObjects.has(o.id)?'#10b981':'#64748b';
+                    m.push(`<polygon points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 3" ${nss}/>`);
+                });
+                const b=GordixObjects.bounds(selectionObjects());
+                if (b) {
+                    const color=outRange?'#dc2626':'#10b981', hsz=10*u;
+                    m.push(`<rect x="${b.left}" y="${-b.top}" width="${b.w}" height="${b.h}" fill="none" stroke="${color}" stroke-width="1" ${nss}/>`);
+                    m.push(GordixWorkspace.svgText(b.x,-b.top-6*u,`${b.w.toFixed(1)} × ${b.h.toFixed(1)} mm`,fs,color));
+                    m.push(`<rect id="design-handle" x="${b.right-hsz/2}" y="${-b.bottom-hsz/2}" width="${hsz}" height="${hsz}" fill="white" stroke="${color}" stroke-width="2" ${nss} style="cursor:nwse-resize;pointer-events:all"/>`);
+                    m.push(`<line x1="${b.x}" y1="${-b.top}" x2="${b.x}" y2="${-b.top-30*u}" stroke="${color}" ${nss}/>`);
+                    m.push(`<circle id="design-rotate" cx="${b.x}" cy="${-b.top-30*u}" r="${7*u}" fill="white" stroke="${color}" stroke-width="2" ${nss} style="cursor:grab;pointer-events:all"/>`);
+                }
             }
             if (gcodeMarker) m.push(`<circle cx="${gcodeMarker.x}" cy="${-gcodeMarker.y}" r="${7 * u}" fill="none" stroke="#dc2626" stroke-width="2.5" ${nss}/>`);
             wsChrome.innerHTML = m.join('');
@@ -1249,46 +1449,58 @@
         }
 
         function drawSnapshot() {
-            return JSON.stringify({ x: design.x, y: design.y, w: widthInput.value, layers: drawLayers, overrides: regionOverrides, layerSeq, fill: fillEnable.checked });
+            saveActiveObject();
+            return JSON.stringify({objects:drawObjects.map(o => ({id:o.id,name:o.name,groupId:o.groupId,sourceId:o.sourceId,
+                x:o.x,y:o.y,angle:o.angle,width:o.width,box:o.box,pixelWidth:o.pixelWidth,pixelHeight:o.pixelHeight,
+                layers:o.layers,overrides:o.overrides,layerSeq:o.layerSeq,fill:o.fill,settings:o.settings})),
+                selected:[...selectedObjects],active:activeObjectId,groupSeq,selectionAngle});
         }
         function scheduleCommit() {
+            if (sceneBusy || restoringScene || drag.mode) return;
             clearTimeout(commitTimer);
             commitTimer = setTimeout(commitDraw, 300);
         }
         function commitDraw() {
-            if (!originalImage || !drawRegions.length && !finalContours.length) return;
+            if (sceneBusy || restoringScene) return;
             const snap = drawSnapshot();
             if (drawHistory.stack[drawHistory.index] === snap) return;
             drawHistory.stack = drawHistory.stack.slice(0, drawHistory.index + 1);
             drawHistory.stack.push(snap);
             if (drawHistory.stack.length > 80) drawHistory.stack.shift();
             drawHistory.index = drawHistory.stack.length - 1;
+            // 僅保留目前場景及八十筆歷史引用的分析版本，避免滑桿操作累積遮罩。
+            const keep=new Set(drawObjects.map(o => o.sourceId));
+            drawHistory.stack.forEach(entry => JSON.parse(entry).objects.forEach(o => keep.add(o.sourceId)));
+            objectSources.forEach((_,id) => {if (!keep.has(id)) objectSources.delete(id);});
             renderUndo();
         }
         // 還原：區域的圖層依「手動指定的位置」重新找回（和重新分析後的做法相同），所以改過門檻也能復原
         function restoreDraw(i) {
-            const d = JSON.parse(drawHistory.stack[i]);
-            drawHistory.index = i;
-            design.x = d.x; design.y = d.y;
-            widthInput.value = d.w;
-            drawLayers = d.layers; regionOverrides = d.overrides; layerSeq = d.layerSeq;
-            fillEnable.checked = d.fill;
-            applyFillUi();
-            drawRegions.forEach(r => { r.layerId = r.auto; });
-            regionOverrides.forEach(o => {
-                const r = regionAt(o.x, o.y, o.tol);
-                if (r && drawLayers.some(l => l.id === o.layerId)) r.layerId = o.layerId;
+            if (sceneBusy) return;
+            const d=JSON.parse(drawHistory.stack[i]);
+            restoringScene=true;
+            drawHistory.index=i; drawObjects=d.objects; selectedObjects=new Set(d.selected);
+            activeObjectId=0; groupSeq=d.groupSeq; selectionAngle=d.selectionAngle;
+            drawObjects.forEach(o => {
+                o.source=objectSources.get(o.sourceId);
+                loadObject(o);
+                drawRegions.forEach(r => {r.layerId=r.auto;});
+                regionOverrides.forEach(override => {
+                    const r=regionAt(override.x,override.y,override.tol);
+                    if (r && drawLayers.some(l => l.id===override.layerId)) r.layerId=override.layerId;
+                });
+                recomputeFillLines();
+                saveActiveObject();
             });
-            closeRegionMenu();
-            recomputeFillLines();
-            scheduleGcodeView();
-            renderUndo();
+            const active=drawObjects.find(o => o.id===d.active) || drawObjects[0];
+            if (active) loadObject(active); else clearActiveObject();
+            refreshScene(); restoringScene=false; renderUndo();
         }
-        const undoDraw = () => { clearTimeout(commitTimer); commitDraw(); if (drawHistory.index > 0) restoreDraw(drawHistory.index - 1); };
-        const redoDraw = () => { if (drawHistory.index < drawHistory.stack.length - 1) restoreDraw(drawHistory.index + 1); };
+        const undoDraw = () => { if (sceneBusy) return; clearTimeout(commitTimer); commitDraw(); if (drawHistory.index > 0) restoreDraw(drawHistory.index - 1); };
+        const redoDraw = () => { if (sceneBusy) return; if (drawHistory.index < drawHistory.stack.length - 1) restoreDraw(drawHistory.index + 1); };
         function renderUndo() {
-            document.getElementById('btn-undo').disabled = drawHistory.index <= 0;
-            document.getElementById('btn-redo').disabled = drawHistory.index >= drawHistory.stack.length - 1;
+            document.getElementById('btn-undo').disabled = sceneBusy || drawHistory.index <= 0;
+            document.getElementById('btn-redo').disabled = sceneBusy || drawHistory.index >= drawHistory.stack.length - 1;
         }
         document.getElementById('btn-undo').onclick = undoDraw;
         document.getElementById('btn-redo').onclick = redoDraw;
@@ -1312,11 +1524,13 @@
             renderStockSummary();
 
             const on = !!originalImage;
-            ['obj-w', 'obj-h', 'obj-x', 'obj-y', 'btn-obj-board', 'btn-obj-origin'].forEach(id => document.getElementById(id).disabled = !on);
+            ['obj-w', 'obj-h', 'obj-x', 'obj-y', 'obj-angle', 'btn-obj-board', 'btn-obj-origin'].forEach(id => document.getElementById(id).disabled = !on || sceneBusy || !selectedObjects.size);
             if (on) {
                 const b = designBoxMm();
                 set('obj-w', b.w.toFixed(1)); set('obj-h', b.h.toFixed(1));
-                set('obj-x', design.x.toFixed(1)); set('obj-y', design.y.toFixed(1));
+                set('obj-x', b.x.toFixed(1)); set('obj-y', b.y.toFixed(1));
+                const objects=selectionObjects();
+                set('obj-angle', (objects.length===1 ? objects[0].angle : selectionAngle).toFixed(1));
             }
         }
 
@@ -1337,25 +1551,33 @@ ${boardLine}`;
 
         // 縮放物件：保持中心不動，依比例改輸出寬度後重算填滿線
         function scaleDesign(ratio) {
-            if (!(ratio > 0) || !isFinite(ratio)) return;
-            widthInput.value = (currentWidthMm() * ratio).toFixed(3);
-            recomputeFillLines();
+            if (!(ratio > 0) || !Number.isFinite(ratio)) return;
+            changeSelection((objects,c) => GordixObjects.scale(objects,c,ratio));
+            // 成員縮放後各自重算填滿，保持毫米間距與線寬。
+            const active=activeObjectId;
+            selectionObjects().forEach(o => {loadObject(o); recomputeFillLines(); saveActiveObject();});
+            const o=drawObjects.find(o => o.id===active); if (o) loadObject(o);
+            refreshScene(); commitDraw();
         }
-
         const numVal = id => parseFloat(document.getElementById(id).value);
-
-
-        document.getElementById('obj-w').addEventListener('change', () => scaleDesign(numVal('obj-w') / designBoxMm().w));
-        document.getElementById('obj-h').addEventListener('change', () => scaleDesign(numVal('obj-h') / designBoxMm().h));
-        ['obj-x', 'obj-y'].forEach(id => document.getElementById(id).addEventListener('input', () => {
-            if (!isNaN(numVal('obj-x'))) design.x = numVal('obj-x');
-            if (!isNaN(numVal('obj-y'))) design.y = numVal('obj-y');
-            updateDesignTransform();
-            renderWorkspace();
+        document.getElementById('obj-w').addEventListener('change',() => scaleDesign(numVal('obj-w')/designBoxMm().w));
+        document.getElementById('obj-h').addEventListener('change',() => scaleDesign(numVal('obj-h')/designBoxMm().h));
+        ['obj-x','obj-y'].forEach(id => document.getElementById(id).addEventListener('input',() => {
+            const b=designBoxMm();
+            moveDesignTo(id==='obj-x' ? numVal(id) : b.x,id==='obj-y' ? numVal(id) : b.y);
         }));
-        function moveDesignTo(x, y) { design.x = x; design.y = y; updateDesignTransform(); renderWorkspace(); scheduleGcodeView(); }
-        document.getElementById('btn-obj-board').onclick = () => { const c = boardCenter(); moveDesignTo(Math.round(c.x * 10) / 10, Math.round(c.y * 10) / 10); };
-        document.getElementById('btn-obj-origin').onclick = () => moveDesignTo(0, 0);
+        function moveDesignTo(x,y) {
+            if (![x,y].every(Number.isFinite)) return;
+            saveActiveObject();
+            const objects=selectionObjects(), c=GordixObjects.bounds(objects);
+            if (!c) return;
+            objects.forEach(o => {o.x+=x-c.x; o.y+=y-c.y;});
+            const o=drawObjects.find(o => o.id===activeObjectId);
+            if (o) {design.x=o.x; design.y=o.y;}
+            refreshScene();
+        }
+        document.getElementById('btn-obj-board').onclick=() => {const c=boardCenter(); moveDesignTo(c.x,c.y);};
+        document.getElementById('btn-obj-origin').onclick=() => moveDesignTo(0,0);
         document.getElementById('btn-fit-view').onclick = fitView;
 
         // 滑鼠 / 觸控：拖物件、拖右下角縮放、拖空白處平移、滾輪或雙指縮放
@@ -1364,29 +1586,29 @@ ${boardLine}`;
             zoomAt(e.clientX, e.clientY, Math.pow(1.1, -e.deltaY / 100));
         }, { passive: false });
 
-        workspace.addEventListener('pointerdown', (e) => {
-            drag.pointers.set(e.pointerId, e);
-            workspace.setPointerCapture(e.pointerId);
-            pointerDownPos = { x: e.clientX, y: e.clientY };
-            closeRegionMenu();
-            if (drag.pointers.size === 2) {
-                const [a, b] = [...drag.pointers.values()];
-                drag.mode = 'pinch';
-                drag.pinchDist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-                return;
+        workspace.addEventListener('pointerdown',e => {
+            if (sceneBusy) return;
+            commitDraw();
+            drag.pointers.set(e.pointerId,e); workspace.setPointerCapture(e.pointerId);
+            pointerDownPos={x:e.clientX,y:e.clientY}; closeRegionMenu();
+            if (drag.pointers.size===2) {
+                const [a,b]=[...drag.pointers.values()]; drag.mode='pinch';
+                drag.pinchDist=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY); return;
             }
-            const t = e.target;
-            drag.startClient = { x: e.clientX, y: e.clientY };
-            if (t.id === 'design-handle') {
-                drag.mode = 'resize';
-                drag.orig = { ...designBoxMm(), width: currentWidthMm() };
-            } else if (originalImage && t.closest('#ws-design')) {
-                drag.mode = 'design';
-                drag.orig = { x: design.x, y: design.y };
-            } else {
-                drag.mode = 'pan';
-                drag.orig = { x: view.x, y: view.y };
-            }
+            const target=e.target, node=target.closest('[data-scene-object]');
+            const id=node ? +node.dataset.sceneObject : target.closest('#ws-design') ? activeObjectId : 0;
+            if (id && (!selectedObjects.has(id) || e.shiftKey)) selectObject(id,e.shiftKey);
+            saveActiveObject();
+            const b=GordixObjects.bounds(selectionObjects());
+            drag.startClient={x:e.clientX,y:e.clientY};
+            if (target.id==='design-handle' && b) drag.mode='resize';
+            else if (target.id==='design-rotate' && b) drag.mode='rotate';
+            else if (id && selectedObjects.has(id)) drag.mode='design';
+            else drag.mode='pan';
+            const p=toSvg(e.clientX,e.clientY);
+            drag.orig={...b,viewX:view.x,viewY:view.y,
+                startAngle:b ? Math.atan2(-p.y-b.y,p.x-b.x)*180/Math.PI : 0,
+                selectionAngle,objects:selectionObjects().map(o => ({id:o.id,x:o.x,y:o.y,angle:o.angle,width:o.width}))};
         });
 
         workspace.addEventListener('pointermove', (e) => {
@@ -1405,38 +1627,44 @@ ${boardLine}`;
             const dx = (e.clientX - drag.startClient.x) * view.w / r.width;
             const dy = (e.clientY - drag.startClient.y) * view.h / r.height;
 
-            if (drag.mode === 'pan') {
-                view.x = drag.orig.x - dx;
-                view.y = drag.orig.y - dy;
-                applyView();
-            } else if (drag.mode === 'design') {
-                moveDesignTo(Math.round((drag.orig.x + dx) * 10) / 10, Math.round((drag.orig.y - dy) * 10) / 10);
-            } else if (drag.mode === 'resize') {
-                // 左上角固定，等比例縮放；拖曳中只改顯示，放開後才重算填滿線
-                const b = drag.orig;
-                const p = toSvg(e.clientX, e.clientY);
-                const ratio = Math.max((p.x - b.left) / b.w, (p.y + b.top) / b.h, 1 / b.w);
-                widthInput.value = (b.width * ratio).toFixed(3);
-                design.x = b.left + b.w * ratio / 2;
-                design.y = b.top - b.h * ratio / 2;
-                updateDesignTransform();
-                renderWorkspace();
+            if (drag.mode==='pan') {
+                view.x=drag.orig.viewX-dx; view.y=drag.orig.viewY-dy; applyView(); return;
             }
+            const orig=drag.orig, objects=selectionObjects();
+            objects.forEach(o => Object.assign(o,orig.objects.find(q => q.id===o.id)));
+            if (drag.mode==='design') {
+                objects.forEach(o => {o.x+=dx; o.y-=dy;});
+            } else if (drag.mode==='resize') {
+                const p=toSvg(e.clientX,e.clientY);
+                const ratio=Math.max((p.x-orig.left)/Math.max(.001,orig.w),(p.y+orig.top)/Math.max(.001,orig.h),.001);
+                GordixObjects.scale(objects,{x:orig.left,y:orig.top},ratio);
+            } else if (drag.mode==='rotate') {
+                const p=toSvg(e.clientX,e.clientY);
+                let angle=Math.atan2(-p.y-orig.y,p.x-orig.x)*180/Math.PI-orig.startAngle;
+                if (e.shiftKey) angle=Math.round(angle/15)*15;
+                GordixObjects.rotate(objects,orig,angle);
+                selectionAngle=GordixObjects.normalized(orig.selectionAngle+angle);
+            }
+            const active=drawObjects.find(o => o.id===activeObjectId);
+            if (active) {design.x=active.x; design.y=active.y; design.angle=active.angle; widthInput.value=active.width;}
+            updateDesignTransform(); renderWorkspace(); scheduleGcodeView();
         });
 
         function endPointer(e) {
             if (!drag.pointers.has(e.pointerId)) return;
             drag.pointers.delete(e.pointerId);
-            const mode = drag.mode;
-            drag.mode = drag.pointers.size === 0 || mode === 'pinch' ? null : mode;
-
-            if (mode === 'resize') recomputeFillLines();
-
-            // 點一下（沒有拖動）區域 → 選單，選要移到哪個圖層
-            if (drawRegions.length && pointerDownPos && mode !== 'pinch' && mode !== 'resize'
-                && Math.hypot(e.clientX - pointerDownPos.x, e.clientY - pointerDownPos.y) < 5) {
-                openRegionMenu(e.clientX, e.clientY);
+            const mode=drag.mode;
+            drag.mode=drag.pointers.size===0 || mode==='pinch' ? null : mode;
+            if (mode==='resize') {
+                const active=activeObjectId;
+                selectionObjects().forEach(o => {loadObject(o); recomputeFillLines(); saveActiveObject();});
+                const o=drawObjects.find(o => o.id===active); if (o) loadObject(o);
             }
+            if (mode==='design' && selectedObjects.size===1 && drawRegions.length && pointerDownPos
+                && Math.hypot(e.clientX-pointerDownPos.x,e.clientY-pointerDownPos.y)<5 && !e.shiftKey) {
+                openRegionMenu(e.clientX,e.clientY);
+            }
+            refreshScene(); commitDraw();
         }
         workspace.addEventListener('pointerup', endPointer);
         workspace.addEventListener('pointercancel', endPointer);
@@ -1732,192 +1960,113 @@ ${boardLine}`;
             return paths.map(({ aci, ...rest }) => ({ ...rest, color: ACI[Math.abs(aci === null || aci === 256 ? layerAci[rest.layer] : aci)] || null }));
         }
 
-        fileInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-
-            pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-            hatchGroup.innerHTML = '';
-            contourGroup.innerHTML = '';
-            
-            finalContours = [];
-            finalFillLines = [];
-            finalLines = [];
-            drawRegions = [];
-            drawLayers = [];
-            designBox = null;
-            regionOverrides = [];
-            drawHistory.stack = []; drawHistory.index = -1;
-            renderUndo();
-            closeRegionMenu();
-            progressSlider.value = 1000;
-            originalPixelData = null;
-            
-            document.getElementById('coord-range').innerText = currentLang === 'zh' ? '處理中...' : 'Processing...';
+        // 每個檔案完成解碼及分析後才加入場景，失敗的檔案不覆蓋先前圖案。
+        fileInput.addEventListener('change', async e => {
+            const files = [...e.target.files];
+            e.target.value = '';
+            if (sceneBusy || !files.length) return;
+            clearTimeout(processDebounceTimeout);
+            commitDraw();
+            saveActiveObject();
+            const previous = activeObjectId;
+            sceneBusy = true;
+            document.body.inert=true;
+            fileInput.disabled = true;
             downloadBtn.disabled = true;
-            downloadBtn.className = "w-full py-4 bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-black rounded-xl transition flex flex-col items-center justify-center leading-tight";
-            document.getElementById('empty-state').classList.remove('hidden');
-
-            const start = board.on ? boardCenter() : { x: 0, y: 0 };
-            design.x = Math.round(start.x * 10) / 10;
-            design.y = Math.round(start.y * 10) / 10;
-
-            fileNameDisplay.innerText = file.name;
-            originalFileName = file.name.replace(/\.[^/.]+$/, "").replace(/[^a-z0-9_\u4e00-\u9fa5]/gi, '_');
-            updateDownloadFileName();
-
-            if (file.name.toLowerCase().endsWith('.dxf')) {
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                    const dxfText = event.target.result;
-                    isSvgSource = true; 
-                    
-                    const lines = dxfText.split(/\r?\n/);
-                    let insunits = 4; // 預設 mm
-                    for (let k = 0; k < lines.length - 2; k++) {
-                        if (lines[k].trim() === '$INSUNITS') {
-                            if (lines[k+2] && lines[k+2].trim() === '70') {
-                                insunits = parseInt(lines[k+4]);
-                                break;
-                            }
-                        }
-                    }
-                    let unitScale = 1.0;
-                    if (insunits === 1) unitScale = 25.4; 
-                    if (insunits === 5) unitScale = 10;   
-                    if (insunits === 6) unitScale = 1000; 
-                    
-                    const rawPaths = await extractPointsFromDxf(dxfText);
-                    rawSvgPaths = rawPaths.map(sp => ({ ...sp, pts: sp.pts.map(p => ({ x: p.x * unitScale, y: p.y * unitScale })) }));
-                    
-                    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-                    rawSvgPaths.forEach(({ pts }) => pts.forEach(p => {
-                        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-                        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-                    }));
-
-                    const dxfW_mm = maxX - minX || 1;
-                    const dxfH_mm = maxY - minY || 1;
-                    
-                    // 套用 DXF 原檔物理毫米尺寸
-                    widthInput.value = dxfW_mm.toFixed(1);
-
-                    const internalScale = 1000 / dxfW_mm;
-                    previewCanvas.width = 1000;
-                    previewCanvas.height = dxfH_mm * internalScale;
-                    
-                    pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-                    const isDarkTheme = document.documentElement.classList.contains('dark');
-                    pCtx.strokeStyle = isDarkTheme ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)";
-                    pCtx.lineWidth = 1;
-                    
-                    rawSvgPaths.forEach(({ pts }) => {
-                        if (pts.length < 2) return;
-                        pCtx.beginPath();
-                        pCtx.moveTo((pts[0].x - minX) * internalScale, (pts[0].y - minY) * internalScale);
-                        for(let i=1; i<pts.length; i++) {
-                            pCtx.lineTo((pts[i].x - minX) * internalScale, (pts[i].y - minY) * internalScale);
-                        }
-                        pCtx.stroke();
-                    });
-
-                    originalImage = { width: 1000, height: previewCanvas.height };
-                    
-                    document.getElementById('empty-state').classList.add('hidden');
-                    processImage();
-                };
-                reader.readAsText(file);
-            } 
-            else if (file.type === 'image/svg+xml' || file.name.toLowerCase().endsWith('.svg')) {
-                const reader = new FileReader();
-                reader.onload = async (event) => {
-                    const svgText = event.target.result;
-                    isSvgSource = true;
-                    rawSvgPaths = await extractPointsFromSvg(svgText);
-                    
-                    const parser = new DOMParser();
-                    const doc = parser.parseFromString(svgText, "image/svg+xml");
-                    const svgEl = doc.querySelector("svg");
-                    
-                    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-                    rawSvgPaths.forEach(({ pts }) => pts.forEach(p => {
-                        minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x);
-                        minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y);
-                    }));
-
-                    const svgW = maxX - minX || 1;
-                    const svgH = maxY - minY || 1;
-
-                    let fileWidthMm = 100; 
-                    if (svgEl) {
-                        const wAttr = svgEl.getAttribute('width');
-                        const vbAttr = svgEl.getAttribute('viewBox');
-                        
-                        if (wAttr) {
-                            fileWidthMm = parseSvgDimension(wAttr, svgW);
-                        } else if (vbAttr) {
-                            const vb = vbAttr.split(/[\s,]+/);
-                            if (vb.length === 4) {
-                                fileWidthMm = parseFloat(vb[2]) * 0.264583; 
-                            }
-                        }
-                    }
-                    
-                    // 套用 SVG 原檔物理毫米尺寸
-                    widthInput.value = fileWidthMm.toFixed(1);
-
-                    const internalScale = 1000 / svgW;
-                    previewCanvas.width = 1000;
-                    previewCanvas.height = svgH * internalScale;
-                    
-                    pCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
-                    const isDarkTheme = document.documentElement.classList.contains('dark');
-                    pCtx.strokeStyle = isDarkTheme ? "rgba(255, 255, 255, 0.3)" : "rgba(15, 23, 42, 0.15)";
-                    pCtx.lineWidth = 1;
-                    
-                    rawSvgPaths.forEach(({ pts }) => {
-                        if (pts.length < 2) return;
-                        pCtx.beginPath();
-                        pCtx.moveTo((pts[0].x - minX) * internalScale, (pts[0].y - minY) * internalScale);
-                        for(let i=1; i<pts.length; i++) {
-                            pCtx.lineTo((pts[i].x - minX) * internalScale, (pts[i].y - minY) * internalScale);
-                        }
-                        pCtx.stroke();
-                    });
-
-                    originalImage = { width: 1000, height: previewCanvas.height }; 
-                    
-                    document.getElementById('empty-state').classList.add('hidden');
-                    processImage();
-                };
-                reader.readAsText(file);
-            } else {
-                isSvgSource = false;
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        originalImage = img;
-                        
-                        // 建立離線畫布儲存高精度原圖色彩數據
-                        const offCanvas = document.createElement('canvas');
-                        offCanvas.width = img.width;
-                        offCanvas.height = img.height;
-                        const offCtx = offCanvas.getContext('2d');
-                        offCtx.drawImage(img, 0, 0);
-                        originalPixelData = offCtx.getImageData(0, 0, img.width, img.height).data;
-                        originalPixelWidth = img.width;
-                        originalPixelHeight = img.height;
-
-                        document.getElementById('empty-state').classList.add('hidden');
-                        renderBinary();
-                        processImage();
-                    };
-                    img.src = event.target.result;
-                };
-                reader.readAsDataURL(file);
+            renderObjectList();
+            const failures = [];
+            for (const file of files) {
+                try {
+                    await importObject(file);
+                } catch (error) {
+                    failures.push(file.name + '：' + error.message);
+                }
             }
+            sceneBusy = false;
+            document.body.inert=false;
+            fileInput.disabled = false;
+            if (!drawObjects.some(o => o.id === activeObjectId)) {
+                activeObjectId = 0;
+                const fallback = drawObjects.find(o => o.id === previous) || drawObjects.at(-1);
+                if (fallback) loadObject(fallback);
+                else clearActiveObject();
+            }
+            refreshScene();
+            commitDraw();
+            document.getElementById('loading-spinner').classList.add('hidden');
+            if (failures.length) document.getElementById('import-errors').innerText = failures.join('\n');
         });
+
+        /** 解碼單一檔案，建立獨立的來源、圖層與物件轉換。 */
+        async function importObject(file) {
+            let source, paths = [], width = 100;
+            const vector = /\.(svg|dxf)$/i.test(file.name) || file.type === 'image/svg+xml';
+            if (vector) {
+                const text = await file.text();
+                if (/\.dxf$/i.test(file.name)) {
+                    const lines = text.split(/\r?\n/);
+                    const index = lines.findIndex(line => line.trim() === '$INSUNITS');
+                    const units = index >= 0 ? parseInt(lines[index + 4]) : 4;
+                    const k = ({1: 25.4, 5: 10, 6: 1000})[units] || 1;
+                    paths = (await extractPointsFromDxf(text)).map(p => ({...p, pts: p.pts.map(q => ({x:q.x*k, y:q.y*k}))}));
+                    const b = boxOf(paths.map(p => p.pts));
+                    width = b ? b.maxX - b.minX || 1 : 100;
+                } else {
+                    paths = await extractPointsFromSvg(text);
+                    const svg = new DOMParser().parseFromString(text, 'image/svg+xml').querySelector('svg');
+                    const b = boxOf(paths.map(p => p.pts));
+                    if (svg && b) {
+                        const w = svg.getAttribute('width'), vb = (svg.getAttribute('viewBox') || '').trim().split(/[\s,]+/);
+                        width = w ? parseSvgDimension(w, b.maxX-b.minX || 1) : vb.length === 4 ? +vb[2]*0.264583 : 100;
+                    }
+                }
+                if (!paths.length) throw new Error('找不到可加工的向量路徑');
+                const b = boxOf(paths.map(p => p.pts));
+                if (![b.minX,b.minY,b.maxX,b.maxY,width].every(Number.isFinite) || width <= 0) throw new Error('圖案尺寸無效');
+                source = {width:1000, height:Math.max(1, Math.round((b.maxY-b.minY || 1)/(b.maxX-b.minX || 1)*1000))};
+            } else {
+                const url = URL.createObjectURL(file);
+                try {
+                    source = await new Promise((resolve, reject) => {
+                        const img = new Image();
+                        img.onload = () => resolve(img);
+                        img.onerror = () => reject(new Error('無法讀取圖片'));
+                        img.src = url;
+                    });
+                } finally { URL.revokeObjectURL(url); }
+            }
+            const start = board.on ? boardCenter() : {x:0,y:0};
+            originalImage = source; isSvgSource = vector; rawSvgPaths = paths;
+            originalFileName = file.name.replace(/\.[^/.]+$/, '').replace(/[^a-z0-9_\u4e00-\u9fa5]/gi, '_');
+            originalPixelData = null; originalPixelWidth = 0; originalPixelHeight = 0;
+            drawRegions = []; drawLayers = []; regionOverrides = []; designBox = null; layerSeq = 1;
+            finalContours = []; finalLines = []; finalFillLines = [];
+            widthInput.value = width;
+            design.x = start.x; design.y = start.y; design.angle = 0;
+            activeObjectId = 0;
+            previewCanvas.width = source.width; previewCanvas.height = source.height;
+            if (!vector) {
+                pCtx.drawImage(source, 0, 0);
+                originalPixelData = pCtx.getImageData(0, 0, source.width, source.height).data;
+                originalPixelWidth = source.width; originalPixelHeight = source.height;
+                renderBinary();
+            }
+            await processImage();
+            const o = {id: ++objectSeq, name:file.name, groupId:null};
+            drawObjects.push(o); activeObjectId = o.id; selectedObjects = new Set([o.id]);
+            saveActiveObject();
+            // 新圖放在既有圖右側，避免全部重疊而難以選取。
+            if (drawObjects.length > 1) {
+                const b = GordixObjects.bounds(drawObjects.slice(0,-1));
+                const own = GordixObjects.bounds([o]);
+                o.x = b.right + 10 + own.w/2;
+                design.x = o.x;
+            }
+            document.getElementById('empty-state').classList.add('hidden');
+            document.getElementById('import-errors').innerText = '';
+            closeRegionMenu();
+            refreshScene();
+        }
 
         // 將含多組 M/m ... Z/z 的複合 path d 屬性精準拆解成獨立子路徑字串陣列
         function splitSvgPathDToSubpaths(d, svg) {
@@ -2158,7 +2307,7 @@ ${boardLine}`;
         function updateDownloadFileName() {
             const suffix = fillEnable.checked ? "_F" : "_O";
             const ext = outputMode === "gcode" ? ".gcode" : ".svg";
-            filenameLabel.innerText = `${originalFileName}${suffix}${ext}`;
+            filenameLabel.innerText = `${drawObjects.length > 1 ? "composition" : originalFileName}${suffix}${ext}`;
         }
 
         function applyFillUi() {
@@ -2238,7 +2387,7 @@ ${boardLine}`;
 
         async function processImage() {
             document.getElementById('loading-spinner').classList.remove('hidden');
-            await new Promise(r => setTimeout(r, 50));
+            if (!originalImage) return;
             
             let targetW_mm = parseFloat(widthInput.value);
             if (isNaN(targetW_mm) || targetW_mm <= 1.0) {
@@ -2285,6 +2434,7 @@ ${boardLine}`;
                 analyzeBitmap(targetW_mm);
             }
 
+            currentSourceId=++analysisSeq;
             designImage.setAttribute('href', previewCanvas.toDataURL());
             designImage.setAttribute('width', previewCanvas.width);
             designImage.setAttribute('height', previewCanvas.height);
@@ -2563,7 +2713,7 @@ ${boardLine}`;
             const pt = workspace.createSVGPoint();
             pt.x = clientX; pt.y = clientY;
             const p = pt.matrixTransform(m.inverse());
-            const tol = 6 / m.a;   // 6 個螢幕像素換成畫布像素
+            const tol = 6 / Math.hypot(m.a, m.b);   // 6 個螢幕像素換成畫布像素
             const r = regionAt(p.x, p.y, tol);
             if (!r) return closeRegionMenu();
             menuRegion = { region: r, x: p.x, y: p.y, tol };
@@ -2687,7 +2837,7 @@ ${boardLine}`;
             renderWorkspace();
             updateStats(previewCanvas.width, previewCanvas.height);
             
-            if (finalContours.length > 0 || finalFillLines.length > 0 || finalLines.length > 0) {
+            if (hasOutput() || finalContours.length > 0 || finalFillLines.length > 0 || finalLines.length > 0) {
                 downloadBtn.disabled = false;
                 downloadBtn.className = "w-full py-4 bg-emerald-600 text-white font-black rounded-xl hover:bg-emerald-500 transition flex flex-col items-center justify-center leading-tight shadow-xl cursor-pointer";
             } else {
@@ -2742,35 +2892,20 @@ ${boardLine}`;
             }).join('');
 
             updateLayerVisibility();
+            saveActiveObject();
         }
 
-        function updateStats(w, h) {
-            let targetW = parseFloat(widthInput.value);
-            if (isNaN(targetW) || targetW <= 0) targetW = 100;
-            const scale = targetW / w;
-            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-            const up = p => { minX = Math.min(minX, p.x*scale); maxX = Math.max(maxX, p.x*scale); minY = Math.min(minY, p.y*scale); maxY = Math.max(maxY, p.y*scale); };
-            finalContours.forEach(p => p.forEach(up));
-            finalLines.forEach(p => p.forEach(up));
-            finalFillLines.forEach(line => line.pts.forEach(up));
-            
-            const d = i18n[currentLang];
-            if (minX !== Infinity) {
-                document.getElementById('coord-range').innerText = 
-                    `${d.statsPrefix}: ${Math.abs(maxX-minX).toFixed(1)} x ${Math.abs(maxY-minY).toFixed(1)} mm\n` +
-                    `${d.statsPos}: X${design.x.toFixed(1)} Y${design.y.toFixed(1)} mm\n` +
-                    (finalLines.length ? `${d.statsCenter}: ${finalLines.length}\n` : '') +
-                    `${d.statsContours}: ${finalContours.length}\n` +
-                    `${d.statsLines}: ${finalFillLines.length}`;
-            } else {
-                document.getElementById('coord-range').innerText = d.noData;
-            }
+        function updateStats() {
+            const paths=scenePaths(), points=paths.flatMap(p => p.pts), d=i18n[currentLang];
+            if (!points.length) {document.getElementById('coord-range').innerText=d.noData; return;}
+            let minX=Infinity,maxX=-Infinity,minY=Infinity,maxY=-Infinity;
+            points.forEach(p => {minX=Math.min(minX,p.x);maxX=Math.max(maxX,p.x);minY=Math.min(minY,p.y);maxY=Math.max(maxY,p.y);});
+            document.getElementById('coord-range').innerText=`${drawObjects.length} 個物件 · ${d.statsPrefix}: ${(maxX-minX).toFixed(1)} × ${(maxY-minY).toFixed(1)} mm\n`+
+                `${d.statsContours}: ${paths.filter(p => p.isClosed).length} · ${d.statsLines}: ${paths.filter(p => p.isHatch).length}`;
         }
 
         function generateGcode() {
-            let targetW = parseFloat(widthInput.value);
-            if (isNaN(targetW) || targetW <= 0) targetW = 100;
-            const mmW = targetW, scale = mmW / previewCanvas.width;
+            const scale = 1;
             const feed = feedInput.value;
             
             const dPen = parseFloat(penDiamInput.value) || 0;
@@ -2778,12 +2913,9 @@ ${boardLine}`;
             // 外框（恆定功率）：雷射用設定的最大功率（材質建議值），畫筆維持 S255
             const outlineS = isLaserMode() ? Math.round(parseFloat(maxSPowerInput.value) || 255) : 255;
 
-            // 物件中心用預覽同一個外框，G-code 位置才會和預覽一致
-            const b = designBoxPx();
-            const midX = (b.minX * scale + b.maxX * scale) / 2, midY = (b.minY * scale + b.maxY * scale) / 2;
-
-            const tx = x => (x - midX + design.x).toFixed(3);
-            const ty = y => (midY - (y * scale) + yOffset + design.y).toFixed(3); 
+            const coord = value => (Math.abs(value) < .0005 ? 0 : value).toFixed(3);
+            const tx = x => coord(x);
+            const ty = y => coord(-y+yOffset);
 
             let g = [
                 `(Generated by Draw Converter)`, 
@@ -2799,10 +2931,7 @@ ${boardLine}`;
                 g.push(`G0 Z${pen.lift.toFixed(3)}`);
             }
 
-            let allPaths = [];
-            finalContours.forEach(path => allPaths.push({ pts: path, isClosed: true, isHatch: false, layer: path.layer || 0 }));
-            finalLines.forEach(path => allPaths.push({ pts: path, isClosed: false, isHatch: false, layer: path.layer || 0 }));
-            finalFillLines.forEach(line => allPaths.push({ pts: line.pts, powers: line.powers, darks: line.darks, isClosed: false, isHatch: true, layer: line.layer || 0 }));
+            let allPaths = scenePaths();
 
             let cx = 0, cy = 0; 
 
@@ -2875,43 +3004,25 @@ ${boardLine}`;
         }
 
         function generateSVG() {
-            let targetW = parseFloat(widthInput.value);
-            if (isNaN(targetW) || targetW <= 0) targetW = 100;
-            const mmW = targetW, scale = mmW / previewCanvas.width;
-            const mmH = previewCanvas.height * scale;
-            
-            let svgStr = `<svg xmlns="http://www.w3.org/2000/svg" width="${mmW}mm" height="${mmH}mm" viewBox="0 0 ${mmW} ${mmH}">\n`;
-            
-            finalContours.forEach(path => {
-                const d = path.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x * scale).toFixed(3)} ${(p.y * scale).toFixed(3)}`).join(' ') + ' Z';
-                svgStr += `  <path d="${d}" fill="none" stroke="#10b981" stroke-width="0.2" />\n`;
-            });
-            finalLines.forEach(path => {
-                const d = path.map((p, i) => `${i === 0 ? 'M' : 'L'} ${(p.x * scale).toFixed(3)} ${(p.y * scale).toFixed(3)}`).join(' ');
-                svgStr += `  <path d="${d}" fill="none" stroke="#10b981" stroke-width="0.2" />\n`;
-            });
-            
-            const minS = parseFloat(minSPowerInput.value) || 0;
-            const maxS = parseFloat(maxSPowerInput.value) || 255;
-            const sRange = (maxS - minS) || 1;
-
-            finalFillLines.forEach(line => {
-                for (let i = 0; i < line.powers.length; i++) {
-                    const pStart = line.pts[i];
-                    const pEnd = line.pts[i+1];
-                    const power = line.powers[i];
-                    const normalizedPower = (power - minS) / sRange;
-                    const alpha = Math.max(0, Math.min(1, normalizedPower)).toFixed(3);
-                    svgStr += `  <line x1="${(pStart.x * scale).toFixed(3)}" y1="${(pStart.y * scale).toFixed(3)}" x2="${(pEnd.x * scale).toFixed(3)}" y2="${(pEnd.y * scale).toFixed(3)}" stroke="#3b82f6" stroke-width="0.1" opacity="${alpha}" />\n`;
+            const paths=scenePaths(), b=GordixObjects.bounds(drawObjects);
+            if (!b) return '<svg xmlns="http://www.w3.org/2000/svg"/>';
+            let svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${b.w}mm" height="${b.h}mm" viewBox="${b.left} ${-b.top} ${b.w || 1} ${b.h || 1}">\n`;
+            paths.forEach(p => {
+                const d=p.pts.map((q,i) => `${i?'L':'M'} ${q.x.toFixed(3)} ${q.y.toFixed(3)}`).join(' ')+(p.isClosed?' Z':'');
+                if (!p.isHatch) svg+=`<path d="${d}" fill="none" stroke="#10b981" stroke-width="0.2"/>\n`;
+                else {
+                    const min=+minSPowerInput.value || 0, max=+maxSPowerInput.value || 255;
+                    p.powers.forEach((power,i) => {
+                        const a=p.pts[i], b=p.pts[i+1], alpha=Math.max(0,Math.min(1,(power-min)/(max-min || 1)));
+                        svg+=`<path d="M ${a.x.toFixed(3)} ${a.y.toFixed(3)} L ${b.x.toFixed(3)} ${b.y.toFixed(3)}" fill="none" stroke="#3b82f6" stroke-width="0.1" opacity="${alpha.toFixed(3)}"/>\n`;
+                    });
                 }
             });
-            
-            svgStr += `</svg>`;
-            return svgStr;
+            return svg+'</svg>';
         }
 
         // ===== G-code 預覽：進度滑桿、2D 疊路徑、3D、續畫檔 =====
-        const hasOutput = () => finalContours.length > 0 || finalLines.length > 0 || finalFillLines.length > 0;
+        const hasOutput = () => drawObjects.some(o => (o.contours || []).length || (o.lines || []).length || (o.hatch || []).length);
         const gcodeViewActive = () => hasOutput() && (view3dOn || progressSlider.value < 1000);
 
         // 路徑或位置改了：預覽作廢；有在看的話稍後重算（拖曳中不會每一步都重算）
@@ -2950,6 +3061,7 @@ ${boardLine}`;
                 `<path data-k="done" d="${s.done}" fill="none" stroke="#2563eb" stroke-width="2" ${nss}/>` : '';
             wsGcode.style.display = show2d ? '' : 'none';
             wsDesign.classList.toggle('gcode-dim', show2d);
+            document.getElementById('ws-objects').style.opacity=show2d ? '.2' : '1';
             const marker = show2d && gcodeView.starts.length ? gcodeView.moves[gcodeView.starts[a.k]] : null;
             if (marker !== gcodeMarker) { gcodeMarker = marker; renderWorkspace(); }
             if (a && view3dOn) gcode3d.setProgress(a.upto);
@@ -3036,7 +3148,7 @@ ${boardLine}`;
         };
 
         downloadBtn.onclick = () => {
-            if (!finalContours.length && !finalFillLines.length && !finalLines.length) return;
+            if (sceneBusy || !hasOutput()) return;
             const isGcode = outputMode === "gcode";
             const content = isGcode ? generateGcode() : generateSVG();
             const blob = new Blob([content], { type: isGcode ? 'text/plain' : 'image/svg+xml' });
@@ -3070,6 +3182,8 @@ ${boardLine}`;
         toggleGrayscalePowerUI();
         updateDownloadFileName();
         fitView();
+        renderObjectList();
+        commitDraw();
     </script>
     <script>
         if ('serviceWorker' in navigator) {
