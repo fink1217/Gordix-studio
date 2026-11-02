@@ -1,4 +1,4 @@
-﻿// 物件轉換測試：使用實際幾何函式驗證旋轉、逆轉換與群組操作。
+// 物件轉換測試：使用實際幾何函式驗證旋轉、逆轉換與群組操作。
 const assert = require('node:assert/strict');
 const G = require('../gordix-objects.js');
 const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-8, `${a} != ${b}`);
@@ -21,4 +21,3 @@ near(pair[0].angle, 90);
 G.scale(pair, {x: 0, y: 0}, 2);
 near(pair[0].y, -100); near(pair[0].width, 200);
 console.log('PASS 旋轉、座標往返、外框與群組等比例縮放');
-

@@ -74,8 +74,10 @@
         <div class="space-y-4 min-w-0">
             <section class="card space-y-2">
                 <div data-i18n="secFile" class="label"></div>
-                <input type="file" id="file-input" accept=".svg,.dxf,.png,.jpg,.jpeg,.bmp,.webp" class="hidden">
+                <input type="file" id="file-input" multiple accept=".svg,.dxf,.png,.jpg,.jpeg,.bmp,.webp" class="hidden">
                 <button id="btn-file" data-i18n="btnFile" class="btn btn-main w-full"></button>
+                <label class="num-field"><span>目前編輯的來源圖</span><select id="source-select" class="num-in" disabled></select></label>
+                <p id="import-error" role="alert" class="text-xs text-red-500 whitespace-pre-line"></p>
                 <div id="file-name" class="text-[11px] text-slate-500 truncate"></div>
                 <div class="grid grid-cols-2 gap-2">
                     <label class="num-field col-span-2"><span data-i18n="targetW"></span><span class="num-wrap" data-unit="mm"><input type="number" id="target-width" class="num-in" min="1" step="0.1" value="100"></span></label>
@@ -201,6 +203,7 @@
                         <label class="num-field"><span>Y</span><span class="num-wrap" data-unit="mm"><input type="number" id="op-y" class="num-in" step="0.1"></span></label>
                         <label class="num-field"><span data-i18n="width"></span><span class="num-wrap" data-unit="mm"><input type="number" id="op-w" class="num-in" min="0.1" step="0.1"></span></label>
                         <label class="num-field"><span data-i18n="height"></span><span class="num-wrap" data-unit="mm"><input type="number" id="op-h" class="num-in" min="0.1" step="0.1"></span></label>
+                        <label class="num-field col-span-2"><span>旋轉角度（逆時針）</span><span class="num-wrap" data-unit="°"><input type="number" id="op-angle" class="num-in" step="1" value="0"></span></label>
                     </div>
                     <div class="grid grid-cols-2 gap-2">
                         <button id="op-group" data-i18n="group" class="btn btn-sub"></button>
@@ -379,6 +382,9 @@ const OP_KEY = { profile: 'opProfile', outer: 'opOuter', inner: 'opInner', pocke
 const isCarveOp = op => op === 'vcarve' || op === 'engrave';   // 立體雕刻：一次到深（或依刀具分層），沒有切穿
 let source = null, groupMode = 'layer', layerSeq = 0, files = [];
 let selLayerId = null, groupSeq = 0;
+let sourceSeq=0, objectSeq=0, importBusy=false, importVersion=0;
+let selectionRotation={key:'',angle:0};
+const sources=new Map(), sourceData=new Map();
 const selObjs = new Set();
 const expanded = new Set();   // 圖層清單展開的圖層
 
@@ -386,8 +392,8 @@ const expanded = new Set();   // 圖層清單展開的圖層
 const groupOf = o => o.groupId ? job.objects.filter(x => x.groupId === o.groupId) : [o];
 
 // 自動群組：最外層的圖形連同它包住的所有圖形（不分圖層）是一個零件；沒有包住別人的單獨圖形不分組
-function autoGroup() {
-    const shapes = job.objects.map(o => ({ o, points: o.points, bounds: GordixCam.boundsOf(o.points) }));
+function autoGroup(objects=job.objects) {
+    const shapes = objects.map(o => ({ o, points: o.points, bounds: GordixCam.boundsOf(o.points) }));
     const area = sh => (sh.bounds.maxX - sh.bounds.minX) * (sh.bounds.maxY - sh.bounds.minY);
     const members = new Map();
     shapes.forEach(sh => {
@@ -396,13 +402,13 @@ function autoGroup() {
         if (!members.has(top)) members.set(top, []);
         members.get(top).push(sh.o);
     });
-    job.objects.forEach(o => { o.groupId = null; });
+    objects.forEach(o => { o.groupId = null; });
     members.forEach(list => { if (list.length > 1) { const g = 'G' + (++groupSeq); list.forEach(o => { o.groupId = g; }); } });
 }
 
 // ===== 復原 / 重做：每次改完存一份圖層與物件的快照（刀具庫另外存，不在這裡）=====
 const history = { stack: [], index: -1 };
-const snapshot = () => JSON.stringify({ layers: job.layers, objects: job.objects, layerSeq });
+const snapshot = () => JSON.stringify({name:job.name,layers:job.layers,objects:job.objects,layerSeq,selectionRotation,sourceId:source?.id,sources:[...sources.values()].map(({data,...meta})=>meta)});
 function commit() {
     const s = snapshot();
     if (history.stack[history.index] === s) return;
@@ -416,14 +422,18 @@ function restore(i) {
     const d = JSON.parse(history.stack[i]);
     history.index = i;
     job.layers = d.layers; job.objects = d.objects; layerSeq = d.layerSeq;
+    job.name=d.name || 'job'; selectionRotation=d.selectionRotation || {key:'',angle:0};
+    sources.clear(); (d.sources || []).forEach(meta => sources.set(meta.id,{...meta,data:sourceData.get(meta.id)}));
+    source=sources.get(d.sourceId) || [...sources.values()].at(-1) || null;
+    syncSource();
     const ids = new Set(job.objects.map(o => o.id));
     [...selObjs].forEach(id => { if (!ids.has(id)) selObjs.delete(id); });
     if (!job.layers.some(l => l.id === selLayerId)) selLayerId = job.layers.length ? job.layers[0].id : null;
     rebuild(false);
     renderUndo();
 }
-const undo = () => { if (history.index > 0) restore(history.index - 1); };
-const redo = () => { if (history.index < history.stack.length - 1) restore(history.index + 1); };
+const undo = () => { if (importBusy) return; clearTimeout(importTimer); importVersion++; if (history.index > 0) restore(history.index - 1); };
+const redo = () => { if (importBusy) return; clearTimeout(importTimer); importVersion++; if (history.index < history.stack.length - 1) restore(history.index + 1); };
 function renderUndo() {
     $('btn-undo').disabled = history.index <= 0;
     $('btn-redo').disabled = history.index >= history.stack.length - 1;
@@ -434,64 +444,118 @@ const firstFlat = () => (tools.find(t => t.type === 'flat') || tools[0] || {}).i
 
 // 讀檔：向量檔有 mm 單位（或是 DXF）時整體寬帶入實際尺寸
 $('btn-file').onclick = () => $('file-input').click();
-$('file-input').onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const ext = file.name.split('.').pop().toLowerCase();
-    const isBitmap = !['svg', 'dxf'].includes(ext);
-    const data = await new Promise(res => {
-        const r = new FileReader();
-        r.onload = () => res(r.result);
-        isBitmap ? r.readAsDataURL(file) : r.readAsText(file);
+/** 將來源設定帶回檔案面板；更換來源不會刪除其他圖案。 */
+function syncSource() {
+    $('source-select').innerHTML='';
+    sources.forEach(src => {
+        const option=document.createElement('option');option.value=src.id;option.textContent=src.name;
+        $('source-select').append(option);
     });
-    source = { data, ext, isBitmap };
-    const base = file.name.replace(/\.[^.]+$/, '');
-    job.name = base.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '') || 'job';   // 機器不一定讀得到中文檔名
-    $('file-name').innerText = file.name;
-    $('threshold-row').classList.toggle('hidden', !isBitmap);
-    const real = isBitmap ? null : GordixImport.realWidth(data, ext);
-    if (real) $('target-width').value = Math.round(real * 100) / 100;
-    job.layers = [];
-    if (!isBitmap) groupMode = GordixImport.autoGroupMode(GordixImport.load(data, ext, { targetW: 100, smooth: 0.1 }));
-    await importSource(false);
-    fitView(true);
-    e.target.value = '';
+    $('source-select').disabled=!sources.size || importBusy;
+    if (!source) {$('file-name').innerText='';return;}
+    $('source-select').value=source.id;
+    $('file-name').innerText=source.name;
+    $('target-width').value=source.targetW;
+    $('smooth').value=source.smooth;
+    $('threshold').value=source.threshold;
+    $('threshold-row').classList.toggle('hidden',!source.isBitmap);
+    groupMode=source.groupMode;
+}
+$('source-select').onchange=e => {
+    clearTimeout(importTimer); importVersion++;
+    source=sources.get(+e.target.value);syncSource();renderStock();
+};
+$('file-input').onchange=async e => {
+    const batch=[...e.target.files];e.target.value='';
+    if (importBusy || !batch.length) return;
+    clearTimeout(importTimer);importVersion++;commit();
+    importBusy=true;document.body.inert=true;
+    const failures=[];
+    for (const file of batch) {
+        try {
+            const ext=file.name.split('.').pop().toLowerCase(), isBitmap=!['svg','dxf'].includes(ext);
+            const data=isBitmap ? await new Promise((resolve,reject) => {
+                const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('無法讀檔'));reader.readAsDataURL(file);
+            }) : await file.text();
+            const paths=isBitmap ? null : GordixImport.load(data,ext,{targetW:100,smooth:.1});
+            if (paths && !paths.length) throw new Error('找不到可加工路徑');
+            const candidate={id:++sourceSeq,name:file.name,data,ext,isBitmap,
+                targetW:isBitmap ? 100 : GordixImport.realWidth(data,ext) || 100,
+                smooth:+$('smooth').value || .1,threshold:+$('threshold').value || 128,
+                groupMode:isBitmap ? 'layer' : GordixImport.autoGroupMode(paths)};
+            const decoded=await sourcePaths(candidate);
+            if (!decoded.length) throw new Error('找不到可加工路徑');
+            const existing=job.objects.length ? selectionBox(job.objects) : null;
+            const bounds=GordixCam.boundsOf(decoded.flatMap(p=>p.points));
+            const center=existing ? {x:existing.maxX+10+(bounds.maxX-bounds.minX)/2,y:boardCenter.y} : boardCenter;
+            source=candidate;sources.set(source.id,source);sourceData.set(source.id,data);
+            appendPaths(decoded,center,false);
+            const base=file.name.replace(/\.[^.]+$/,'');
+            job.name=sources.size>1 ? 'composition' : base.replace(/[^A-Za-z0-9_-]+/g,'_').replace(/^_+|_+$/g,'') || 'job';
+        } catch(error) {failures.push(file.name+'：'+error.message);}
+    }
+    importBusy=false;document.body.inert=false;
+    syncSource();$('import-error').innerText=failures.join('\n');
+    rebuild();fitView(true);
 };
 
-// 依目前的寬度、簡化度、門檻與分組重新讀檔；圖層設定依分組鍵沿用，位置保持在原來的中心
-async function importSource(keepCenter) {
-    if (!source) return;
-    const targetW = parseFloat($('target-width').value) || 100;
-    const smooth = parseFloat($('smooth').value) || 0.1;
-    const paths = source.isBitmap
-        ? (await GordixImport.loadBitmap(source.data, { targetW, smooth, threshold: parseInt($('threshold').value, 10) })).paths
-        : GordixImport.load(source.data, source.ext, { targetW, smooth });
-    const center = keepCenter && job.objects.length ? selectionBox([...job.objects]) : boardCenter;
-    const c = { x: (center.minX + center.maxX) / 2 || center.x || 0, y: (center.minY + center.maxY) / 2 || center.y || 0 };
-    const old = new Map(job.layers.filter(l => l.key != null).map(l => [l.key, l]));
-    const groups = GordixImport.groupPaths(paths.filter(p => p.points.length >= 2), groupMode);
-    job.layers = groups.map((g, i) => old.get(g.key) || {
-        id: 'L' + (layerSeq++), key: g.key, name: g.key, color: groupMode === 'color' ? g.key : LAYER_COLORS[i % LAYER_COLORS.length],
-        visible: true, op: 'profile', toolId: firstFlat(), depth: 3.0, through: false, tabs: false
-    });
-    job.objects = [];
-    groups.forEach((g, i) => g.paths.forEach(p => job.objects.push({
-        id: job.objects.length + 1, layerId: job.layers[i].id, points: p.points.map(q => ({ x: q.x + c.x, y: q.y + c.y }))
-    })));
-    autoGroup();
-    selObjs.clear();
-    selLayerId = job.layers.length ? job.layers[0].id : null;
-    history.stack = []; history.index = -1;   // 換檔或重新讀檔：從這裡開始記
-    rebuild();
+/** 解析指定來源，所有 await 在修改既有工作之前完成。 */
+async function sourcePaths(src) {
+    return src.isBitmap ? (await GordixImport.loadBitmap(src.data,{targetW:src.targetW,smooth:src.smooth,threshold:src.threshold})).paths
+        : GordixImport.load(src.data,src.ext,{targetW:src.targetW,smooth:src.smooth});
 }
-let importTimer = 0;
-const reimport = () => { clearTimeout(importTimer); importTimer = setTimeout(() => importSource(true), 250); };
-['target-width', 'smooth', 'threshold'].forEach(id => $(id).addEventListener('input', reimport));
-document.querySelectorAll('[data-group]').forEach(b => b.onclick = () => {
-    if (groupMode === b.dataset.group) return;
-    groupMode = b.dataset.group;
-    job.layers = [];
-    importSource(true);
+
+/** 新圖追加獨立圖層；重新分析時僅替換目前來源的物件。 */
+function appendPaths(paths,center,replace) {
+    const previous=job.objects.filter(o=>o.sourceId===source.id);
+    const oldLayers=job.layers.filter(l=>l.sourceId===source.id);
+    const old=new Map(oldLayers.map(l=>[l.key,l]));
+    const groups=GordixImport.groupPaths(paths.filter(p=>p.points.length>=2),source.groupMode);
+    if (replace) {
+        job.objects=job.objects.filter(o=>o.sourceId!==source.id);
+        // 跨來源物件可以移到同一圖層；重解析時保留仍被其他來源引用的圖層。
+        job.layers=job.layers.filter(l=>l.sourceId!==source.id || job.objects.some(o=>o.layerId===l.id));
+    }
+    const layers=groups.map((g,i)=>old.get(g.key) || {
+        id:'L'+layerSeq++,sourceId:source.id,key:g.key,
+        name:g.key,color:source.groupMode==='color'?g.key:LAYER_COLORS[i%LAYER_COLORS.length],
+        visible:true,op:'profile',toolId:firstFlat(),depth:3,through:false,tabs:false
+    });
+    job.layers.push(...layers.filter(l=>!job.layers.some(old=>old.id===l.id)));
+    const added=[];
+    const stable=replace && previous.length===paths.length;
+    groups.forEach((g,i)=>g.paths.forEach(p=>{
+        const index=paths.indexOf(p), prior=stable ? previous.find(o=>o.pathIndex===index) : null;
+        const matrix=prior?.matrix || (replace && previous[0]?.matrix) || {a:1,b:0,c:0,d:1,e:center.x,f:center.y};
+        added.push({id:prior?.id || ++objectSeq,sourceId:source.id,pathIndex:index,layerId:prior && !oldLayers.some(l=>l.id===prior.layerId) && job.layers.some(l=>l.id===prior.layerId) ? prior.layerId : layers[i].id,
+            matrix:{...matrix},groupId:prior?.groupId || null,
+            points:p.points.map(q=>({x:matrix.a*q.x+matrix.c*q.y+matrix.e,y:matrix.b*q.x+matrix.d*q.y+matrix.f}))});
+    }));
+    job.objects.push(...added);
+    if (!stable) autoGroup(added);
+    selObjs.clear();selLayerId=layers[0]?.id || null;
+}
+
+/** 調整來源尺寸或解析設定時，只重新處理該檔案。 */
+async function importSource(keepCenter) {
+    if (!source || importBusy) return;
+    const version=++importVersion, src=source;
+    const candidate={...src,targetW:+$('target-width').value || 100,smooth:+$('smooth').value || .1,
+        threshold:+$('threshold').value,groupMode};
+    const paths=await sourcePaths(candidate);
+    if (version!==importVersion || source!==src) return;
+    const members=job.objects.filter(o=>o.sourceId===src.id);
+    const b=members.length ? selectionBox(members) : null;
+    const center=keepCenter && b ? {x:(b.minX+b.maxX)/2,y:(b.minY+b.maxY)/2} : boardCenter;
+    source=candidate;sources.set(source.id,source);
+    appendPaths(paths,center,true);syncSource();rebuild();
+}
+let importTimer=0;
+const reimport=()=>{clearTimeout(importTimer);importTimer=setTimeout(()=>importSource(true).catch(error=>{$('import-error').innerText=error.message;}),250);};
+['target-width','smooth','threshold'].forEach(id=>$(id).addEventListener('input',reimport));
+document.querySelectorAll('[data-group]').forEach(b=>b.onclick=()=>{
+    if (groupMode===b.dataset.group) return;
+    groupMode=b.dataset.group;importSource(true).catch(error=>{$('import-error').innerText=error.message;});
 });
 ['overcut', 'safe-z', 'resolution'].forEach(id => $(id).addEventListener('change', rebuild));
 
@@ -506,7 +570,7 @@ function rebuild(record = true) {
     buildLayout();
     renderAll();
     schedulePreview();
-    if (record && job.objects.length) commit();
+    if (record) commit();
 }
 
 function renderAll() {
@@ -747,13 +811,25 @@ function selectionBox(objs) {
     return b;
 }
 const selected = () => job.objects.filter(o => selObjs.has(o.id));
-function transformSel(fn) { selected().forEach(o => { o.points = o.points.map(fn); }); }
+function transformSel(fn) {
+    // 目前的移動、等比縮放與旋轉都是仿射轉換，保留矩陣讓重新解析也能沿用擺放。
+    const p=fn({x:0,y:0}),x=fn({x:1,y:0}),y=fn({x:0,y:1});
+    const a=x.x-p.x,b=x.y-p.y,c=y.x-p.x,d=y.y-p.y;
+    selected().forEach(o=>{
+        const m=o.matrix || {a:1,b:0,c:0,d:1,e:0,f:0};
+        o.matrix={a:a*m.a+c*m.b,b:b*m.a+d*m.b,c:a*m.c+c*m.d,d:b*m.c+d*m.d,
+            e:a*m.e+c*m.f+p.x,f:b*m.e+d*m.f+p.y};
+        o.points=o.points.map(fn);
+    });
+}
 
 function renderObjPanel() {
     const sel = selected(), L = T();
     $('op-none').classList.toggle('hidden', sel.length > 0);
     $('op-fields').classList.toggle('hidden', !sel.length);
     if (!sel.length) return;
+    const key=sel.map(o=>o.id).sort((a,b)=>a-b).join(',');
+    if (selectionRotation.key!==key) selectionRotation={key,angle:0};
     const b = selectionBox(sel);
     const set = (id, v) => { if (document.activeElement !== $(id)) $(id).value = v; };
     const groups = new Set(sel.map(o => o.groupId).filter(Boolean)).size;
@@ -764,8 +840,22 @@ function renderObjPanel() {
     const layersOfSel = new Set(sel.map(o => o.layerId));
     $('op-layer').value = layersOfSel.size === 1 ? [...layersOfSel][0] : '';
     set('op-x', ((b.minX + b.maxX) / 2).toFixed(1)); set('op-y', ((b.minY + b.maxY) / 2).toFixed(1));
+    set('op-angle',selectionRotation.angle.toFixed(1));
     set('op-w', (b.maxX - b.minX).toFixed(1)); set('op-h', (b.maxY - b.minY).toFixed(1));
 }
+/** 繞選取範圍中心旋轉，直接更新既有毫米幾何供 CAM 使用。 */
+function rotateSel(degrees,center) {
+    if (!selected().length || !Number.isFinite(degrees)) return;
+    const b=selectionBox(selected()), c=center || {x:(b.minX+b.maxX)/2,y:(b.minY+b.maxY)/2};
+    const a=degrees*Math.PI/180, cs=Math.cos(a),sn=Math.sin(a);
+    transformSel(p=>({x:c.x+(p.x-c.x)*cs-(p.y-c.y)*sn,y:c.y+(p.x-c.x)*sn+(p.y-c.y)*cs}));
+    selectionRotation.angle+=degrees;
+}
+$('op-angle').addEventListener('change',()=>{
+    const value=+$('op-angle').value;
+    if (!Number.isFinite(value)) return;
+    rotateSel(value-selectionRotation.angle);rebuild();
+});
 $('op-layer').onchange = e => { selected().forEach(o => { o.layerId = e.target.value; }); selLayerId = e.target.value; rebuild(); };
 ['op-x', 'op-y'].forEach(id => $(id).addEventListener('change', () => {
     const b = selectionBox(selected()), x = parseFloat($('op-x').value), y = parseFloat($('op-y').value);
@@ -964,6 +1054,11 @@ function render2D() {
         const h = headAt(st);
         s.push(`<circle cx="${h.x}" cy="${-h.y}" r="${6 * u}" fill="#dc2626" ${nss} pointer-events="none"/>`);
     }
+    if (selected().length) {
+        const b=selectionBox(selected()),cx=(b.minX+b.maxX)/2;
+        s.push(`<line x1="${cx}" y1="${-b.maxY}" x2="${cx}" y2="${-b.maxY-28*u}" stroke="#facc15" ${nss} pointer-events="none"/>`);
+        s.push(`<circle id="cnc-rotate" cx="${cx}" cy="${-b.maxY-28*u}" r="${7*u}" fill="white" stroke="#facc15" stroke-width="2" ${nss} style="cursor:grab"/>`);
+    }
     ws.innerHTML = s.join('');
 
     // 位置警告：超出加工範圍（紅）、超出板材（橘）；只提示，不擋下載
@@ -987,6 +1082,12 @@ ws.addEventListener('pointerdown', e => {
         const [a, b] = [...drag.pointers.values()];
         drag.mode = 'pinch'; drag.pinch = Math.hypot(a.x - b.x, a.y - b.y);
         return;
+    }
+    if (e.target.id==='cnc-rotate' && selected().length) {
+        const b=selectionBox(selected()),p=toSvg(e.clientX,e.clientY);
+        drag.center={x:(b.minX+b.maxX)/2,y:(b.minY+b.maxY)/2};
+        drag.angle=Math.atan2(-p.y-drag.center.y,p.x-drag.center.x)*180/Math.PI;
+        drag.mode='rotate';drag.moved=false;return;
     }
     const el = e.target.closest('[data-obj]');
     drag.moved = false;
@@ -1025,7 +1126,14 @@ ws.addEventListener('pointermove', e => {
         drag.pinch = d;
         return;
     }
-    if (drag.mode === 'move') {
+    if (drag.mode==='rotate') {
+        const p=toSvg(e.clientX,e.clientY);
+        const angle=Math.atan2(-p.y-drag.center.y,p.x-drag.center.x)*180/Math.PI;
+        let delta=angle-drag.angle;
+        if (e.shiftKey) delta=Math.round(delta/15)*15;
+        rotateSel(delta,drag.center);drag.angle+=delta;drag.moved=true;dragging=true;
+        renderObjPanel();render2D();
+    } else if (drag.mode === 'move') {
         const p = toSvg(e.clientX, e.clientY), dx = p.x - drag.last.x, dy = -(p.y - drag.last.y);
         if (!dx && !dy) return;
         drag.last = p; drag.moved = true; dragging = true;
@@ -1042,7 +1150,7 @@ ws.addEventListener('pointermove', e => {
 const endDrag = e => {
     drag.pointers.delete(e.pointerId);
     if (drag.mode === 'pan' && !drag.moved && !e.shiftKey && selObjs.size) { selObjs.clear(); renderAll(); }
-    if (drag.mode === 'move' && drag.moved) { dragging = false; rebuild(); }
+    if (['move','rotate'].includes(drag.mode) && drag.moved) { dragging = false; rebuild(); }
     dragging = false;
     if (!drag.pointers.size) drag.mode = null;
 };
@@ -1197,6 +1305,7 @@ setTheme(localStorage.getItem('gordix-theme') || 'dark');
 setView(false);
 applyLang();
 fitView();
+commit();
 
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('./service-worker.js').catch(() => { }));
