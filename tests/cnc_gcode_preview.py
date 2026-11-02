@@ -29,7 +29,9 @@ def main():
         check('停頓參數不會被錯當成移動', 'G4' in page.locator('#project-status').inner_text())
         archive = Path(__file__).resolve().parents[1] / 'recovered' / 'composition.recovery.gordix.json'
         if archive.exists():
-            page.set_input_files('#project-input', str(archive))
+            import json
+            data = json.loads(archive.read_text(encoding='utf-8'))
+            page.evaluate('data=>GordixGcodePreview.open(data)', data)
             page.wait_for_selector('#gcode-preview-dialog[open]')
             check('實際恢復檔含兩份加工刀路', page.locator('#gcode-file-select option').count() == 2)
             page.select_option('#gcode-file-select', '1')

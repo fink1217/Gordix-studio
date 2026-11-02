@@ -7,6 +7,7 @@ window.GordixGcodePreview = (() => {
         <strong>既有 G-code 預覽</strong><button id="gcode-close" class="btn btn-sub">關閉</button>
         <button id="gcode-top" class="btn btn-sub">俯視／立體</button>
         <button id="gcode-archive-save" class="btn btn-sub">儲存刀路恢復檔</button>
+        <button id="gcode-restore-edit" class="btn btn-main">恢復到主編輯區</button>
         <select id="gcode-file-select" aria-label="預覽的 G-code" class="num-in" style="max-width:480px"></select></div>
         <p id="gcode-preview-note" style="font-size:13px;margin:8px 0"></p>
         <div id="gcode-preview-canvas" style="height:calc(100% - 160px);min-height:180px;position:relative"></div>
@@ -41,6 +42,8 @@ window.GordixGcodePreview = (() => {
         if(data?.format!=='gordix-gcode-recovery' || data.version!==1 || !Array.isArray(data.files) || !data.files.length)throw Error('刀路恢復檔格式無效');
         data.files.forEach(file=>{if(typeof file.name!=='string')throw Error('刀路缺少名稱');validate(file.gcode);});
         archive=JSON.parse(JSON.stringify(data));
+        el('gcode-restore-edit').disabled=!archive.editableProject && !archive.sources?.length;
+        el('gcode-restore-edit').title=el('gcode-restore-edit').disabled ? '需要附原圖的恢復檔或完整專案才能恢復編輯' : '恢復物件、圖層與可輸出的刀路';
         el('gcode-file-select').replaceChildren(...archive.files.map((file,index)=>{const option=document.createElement('option');option.value=index;option.textContent=file.name;return option;}));
         el('gcode-preview-note').textContent=data.note || '原始座標直接預覽；不重新產生刀路。此檔不包含可確認的原始圖層、群組與加工設定。';
         if(!dialog.open)dialog.showModal();show(0);
@@ -49,10 +52,11 @@ window.GordixGcodePreview = (() => {
     el('gcode-close').onclick=()=>dialog.close();
     dialog.addEventListener('close',()=>player?.pause());
     el('gcode-top').onclick=()=>{top=!top;view?.setTop(top);};
+    el('gcode-restore-edit').onclick=()=>window.dispatchEvent(new CustomEvent('gordix:recover-toolpaths',{detail:archive}));
     el('gcode-archive-save').onclick=()=>{
         const url=URL.createObjectURL(new Blob([JSON.stringify(archive)],{type:'application/json'}));
         const link=document.createElement('a');link.href=url;link.download='toolpaths.recovery.gordix.json';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
     };
     window.addEventListener('resize',()=>{if(dialog.open)view?.resize();});
-    return {open,validate};
+    return {open,validate,setMessage(message){el('gcode-preview-note').textContent=message;}};
 })();

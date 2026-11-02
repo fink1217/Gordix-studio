@@ -5,7 +5,7 @@
     panel.className = 'studio-panel card space-y-2';
     panel.innerHTML = `<div class="label">專案存檔</div><div class="flex gap-2">
         <button id="project-save" class="btn btn-sub">儲存專案</button>
-        <button id="project-open" class="btn btn-sub">開啟專案</button></div>
+        <button id="project-open" class="btn btn-sub">開啟專案／恢復編輯</button></div>
         <button id="gcode-import" class="btn btn-sub w-full">匯入 G-code 預覽</button>
         <input id="gcode-input" type="file" accept=".gcode,.nc,.tap,.txt" multiple hidden>
         <input id="project-input" type="file" accept=".json,.gordix" hidden>
@@ -79,6 +79,7 @@
         $('overcut').value=job.overcut;$('safe-z').value=job.safeZ;$('resolution').value=job.resolution;
         $('route-mode').value=job.routing;
         syncSource();rebuild(false);fitView();
+        document.getElementById('gcode-preview-dialog')?.close();
     }
 
     async function open(data) {
@@ -131,13 +132,29 @@
         try{await open(previous);$('project-recover').hidden=true;}catch(error){status(error.message);}
     };
     $('project-open').onclick=()=>$('project-input').click();
+    let openVersion=0;
+    async function loadProject(data,version=++openVersion) {
+        if(version!==openVersion)return;
+        if(data.format==='gordix-gcode-recovery') {
+            const message='正在將舊恢復檔的原圖與刀路對位，恢復可編輯專案…';
+            status(message);GordixGcodePreview.setMessage(message);
+            data=await GordixRecoverImport.convert(data,{stock,tableId,table,tableConfigured});
+        }
+        if(version!==openVersion)return;
+        await open(data);
+    }
+    window.addEventListener('gordix:recover-toolpaths',async event=>{
+        try{await loadProject(event.detail);}catch(error){
+            status(`恢復失敗：${error.message}`);GordixGcodePreview.setMessage(`恢復失敗：${error.message}`);
+        }
+    });
     $('project-input').onchange=async event=>{
         const file=event.target.files[0];if(!file)return;
+        const version=++openVersion;
         try {
             if(file.size>100*1024*1024)throw Error('專案超過 100 MB');
             const data=JSON.parse(await file.text());
-            if(data.format==='gordix-gcode-recovery')GordixGcodePreview.open(data);
-            else await open(data);
+            await loadProject(data,version);
         }catch(error){status(`開啟失敗：${error.message}`);}finally{event.target.value='';}
     };
     $('gcode-import').onclick=()=>$('gcode-input').click();
