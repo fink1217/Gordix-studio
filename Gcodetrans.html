@@ -8,7 +8,7 @@
     <script src="gordix-table.js?v=10"></script>
     <script src="gordix-preview.js?v=10"></script>
     <script src="gordix-sim.js?v=10"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="vendor/tailwindcss.js?v=3.4.17"></script>
     <!-- 數字欄位可以輸入算式（+ - * /） -->
     <script src="gordix-calc.js?v=10"></script>
     <script>
@@ -158,12 +158,14 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon-192.png">
+    <link rel="stylesheet" href="gordix-ui.css?v=14">
+    <script src="gordix-ui.js?v=14" defer></script>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
-    <div class="max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors duration-300">
+<body data-studio-page="Gcodetrans" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
+    <div class="studio-shell max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors duration-300">
 
         <!-- 頂部導航 -->
-        <div class="bg-gradient-to-r from-emerald-600 to-teal-950 p-5 text-white flex justify-between items-center border-b border-emerald-500/30 shadow-lg mb-4">
+        <div class="studio-header bg-gradient-to-r from-emerald-600 to-teal-950 p-5 text-white flex justify-between items-center border-b border-emerald-500/30 shadow-lg mb-4">
             <div>
                 <h1 id="txt-header-title" class="text-2xl font-black tracking-tight">
                     Gcode 即時調整
@@ -195,6 +197,12 @@
                 </a>
             </div>
         </div>
+        <nav class="studio-workflow" aria-label="加工流程 / Workflow">
+            <a href="table_conf.html"><b>01</b><span class="studio-zh">工作台</span><span class="studio-en">Table</span></a>
+            <a href="stock.html"><b>02</b><span class="studio-zh">毛胚</span><span class="studio-en">Stock</span></a>
+            <a href="index.html#step-3"><b>03</b><span class="studio-zh">加工設定</span><span class="studio-en">Toolpaths</span></a>
+            <a href="Gcodetrans.html" aria-current="step"><b>04</b><span class="studio-zh">檢查輸出</span><span class="studio-en">Review</span></a>
+        </nav>
 
         <div class="container mx-auto px-4 max-w-7xl">
             <!-- 主網格：行動端單欄，桌機端拆分為 3 - 6 - 3 三欄 -->
@@ -431,7 +439,7 @@
                                 <p class="text-sm font-mono font-bold" id="distContainer"><span id="distEst">0</span> <span class="text-[10px] text-gray-500">mm</span></p>
                             </div>
                         </div>
-                        <button id="downloadBtn" class="w-full bg-emerald-500 text-gray-900 py-3 rounded-lg font-black text-xs uppercase hover:bg-emerald-400 transition shadow-lg disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed" disabled>
+                        <button data-ui-action="primary" id="downloadBtn" class="w-full bg-emerald-500 text-gray-900 py-3 rounded-lg font-black text-xs uppercase hover:bg-emerald-400 transition shadow-lg disabled:bg-gray-700 disabled:text-gray-500 disabled:cursor-not-allowed" disabled>
                             下載修改後的 G-code
                         </button>
                     </div>

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Draw Converter</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="vendor/tailwindcss.js?v=3.4.17"></script>
     <!-- 數字欄位可以輸入算式（+ - * /） -->
     <script src="gordix-calc.js?v=10"></script>
     <!-- 3D G-code 預覽（與 CNC.html 相同版本） -->
@@ -150,11 +150,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link class="apple-touch-icon" href="icon-192.png">
+    <link rel="stylesheet" href="gordix-ui.css?v=14">
+    <script src="gordix-ui.js?v=14" defer></script>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
-    <div class="max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors duration-300">
+<body data-studio-page="draw" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans transition-colors duration-300">
+    <div class="studio-shell max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors duration-300">
         <!-- Header -->
-        <div class="bg-gradient-to-r from-blue-700 to-indigo-900 p-4 md:p-6 gap-3 text-white flex justify-between items-center border-b border-indigo-500/30">
+        <div class="studio-header bg-gradient-to-r from-blue-700 to-indigo-900 p-4 md:p-6 gap-3 text-white flex justify-between items-center border-b border-indigo-500/30">
             <div>
                 <h1 id="i18n-title" class="text-lg md:text-2xl font-black tracking-tight none">轉檔工具 (繪圖)</h1>
             </div>
@@ -189,25 +191,32 @@
                 <div id="loading-spinner" class="hidden animate-spin rounded-full h-5 w-5 border-2 border-white border-t-transparent"></div>
             </div>
         </div>
+        <nav class="studio-workflow" aria-label="加工流程 / Workflow">
+            <a href="table_conf.html"><b>01</b><span class="studio-zh">工作台</span><span class="studio-en">Table</span></a>
+            <a href="stock.html"><b>02</b><span class="studio-zh">毛胚</span><span class="studio-en">Stock</span></a>
+            <a href="index.html#step-3" aria-current="step"><b>03</b><span class="studio-zh">加工設定</span><span class="studio-en">Toolpaths</span></a>
+            <a href="Gcodetrans.html"><b>04</b><span class="studio-zh">檢查輸出</span><span class="studio-en">Review</span></a>
+        </nav>
 
         <!-- 3-Column Layout: Left Sidebar (Inputs & Sliders) | Center (Preview Canvas) | Right Sidebar (Output Config & Downloader) -->
         <div class="grid grid-cols-1 lg:grid-cols-12">
             
             <!-- Left Sidebar (3/12 width): Image Processing & Optimization Parameters -->
-            <div class="lg:col-span-3 p-6 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-6 overflow-y-auto max-h-[85vh] transition-colors duration-300">
+            <div class="studio-sidebar lg:col-span-3 p-6 border-r border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-6 overflow-y-auto max-h-[85vh] transition-colors duration-300">
                 <!-- 圖片來源 -->
-                <section>
+                <section data-ui-role="source" class="studio-panel">
                     <label id="i18n-label-source" class="block text-[10px] font-black text-slate-500 dark:text-slate-400 none tracking-widest mb-2">1. 圖片來源</label>
                     <div class="flex items-center gap-3">
-                        <label for="file-input" class="custom-file-upload" id="i18n-btn-browse">選擇檔案</label>
-                        <p id="import-errors" role="alert" class="text-xs text-red-600 whitespace-pre-line"></p>
+                        <label data-ui-action="import" for="file-input" class="custom-file-upload" id="i18n-btn-browse">選擇檔案</label>
+
                         <input type="file" id="file-input" multiple accept="image/*,.svg,.dxf" class="hidden">
                         <span id="file-name-display" class="text-[10px] text-slate-500 dark:text-slate-400 truncate max-w-[150px]">No file chosen</span>
                     </div>
+                <p id="import-errors" role="alert" class="text-xs text-red-600 whitespace-pre-line"></p>
                 </section>
 
                 <!-- 影像處理 -->
-                <section class="p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 transition-colors duration-300">
+                <section class="studio-panel p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 transition-colors duration-300">
                     <div>
                         <div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 none font-black mb-2 tracking-widest">
                             <span id="i18n-label-threshold">黑白門檻</span>
@@ -225,7 +234,7 @@
                 </section>
 
                 <!-- 曲線優化 -->
-                <section data-advanced class="p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-blue-500/30 space-y-4 transition-colors duration-300">
+                <section data-advanced class="studio-panel p-4 bg-slate-100 dark:bg-slate-800/60 rounded-xl border border-slate-200 dark:border-blue-500/30 space-y-4 transition-colors duration-300">
                     <div>
                         <div class="flex justify-between text-[10px] text-slate-500 dark:text-slate-400 none font-black mb-2 tracking-widest">
                             <span id="i18n-label-smooth">曲線平滑度</span>
@@ -243,7 +252,7 @@
                 </section>
 
                 <!-- 圖層：點陣圖自動分成細線 / 色塊；每層可勾選、選畫法、調順序（上面的先畫），點預覽上的區域可移到別的圖層 -->
-                <section id="layer-section" class="hidden p-4 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 transition-colors duration-300">
+                <section id="layer-section" class="studio-panel hidden p-4 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 transition-colors duration-300">
                     <div class="flex items-center justify-between">
                         <label data-i18n="layersTitle" class="text-[10px] font-black text-slate-500 dark:text-slate-400 tracking-widest">圖層（上面的先畫）</label>
                         <button id="btn-add-layer" data-i18n="addLayer" class="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[9px] font-bold transition">＋ 新增圖層</button>
@@ -253,7 +262,7 @@
                 </section>
 
                 <!-- 填滿設定 -->
-                <section class="p-4 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 transition-colors duration-300">
+                <section class="studio-panel p-4 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 space-y-4 transition-colors duration-300">
                     <div class="flex items-center justify-between">
                         <label id="i18n-label-fill-title" class="text-[10px] font-black text-slate-500 dark:text-slate-400 none tracking-widest">填滿設定 (Hatch)</label>
                         <input type="checkbox" id="enable-fill" class="w-4 h-4 accent-blue-500 rounded">
@@ -283,7 +292,7 @@
             </div>
 
             <!-- Center Preview Area (6/12 width) -->
-            <div class="lg:col-span-6 p-8 flex flex-col bg-slate-50/50 dark:bg-slate-950/20 transition-colors duration-300">
+            <div class="studio-center lg:col-span-6 p-8 flex flex-col bg-slate-50/50 dark:bg-slate-950/20 transition-colors duration-300">
                 <div class="flex flex-wrap justify-between items-center mb-4 gap-4">
                     <div class="flex gap-4">
                         <div class="flex items-center gap-2">
@@ -366,9 +375,40 @@
             </div>
 
             <!-- Right Sidebar (3/12 width): Machine Controls & Download Actions -->
-            <div class="lg:col-span-3 p-6 border-l border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-6 overflow-y-auto max-h-[85vh] transition-colors duration-300">
+            <div class="studio-sidebar lg:col-span-3 p-6 border-l border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 space-y-6 overflow-y-auto max-h-[85vh] transition-colors duration-300">
+                <section class="studio-panel p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 space-y-1">
+                    <div class="flex justify-between items-center">
+                        <label data-i18n="labelStock" class="text-[10px] font-black text-amber-700 dark:text-amber-400 tracking-widest"></label>
+                        <a href="stock.html" data-i18n="linkStock" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"></a>
+                    </div>
+                    <div id="stock-summary" class="text-[11px] font-mono text-slate-700 dark:text-slate-300 leading-relaxed"></div>
+                    <div id="table-unset" class="hidden text-[10px] font-bold text-amber-600 dark:text-amber-400"></div>
+                </section>
+                <section class="studio-panel p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-500/20 space-y-2">
+                    <label id="i18n-label-object" class="block text-[10px] font-black text-emerald-700 dark:text-emerald-400 tracking-widest">加工物件</label>
+                    <div id="object-list" class="space-y-1 max-h-44 overflow-y-auto"></div>
+                    <div class="flex flex-wrap gap-1 text-[11px]">
+                        <button id="btn-select-all" class="px-2 py-1 rounded bg-emerald-500/20">全選</button>
+                        <button id="btn-group" class="px-2 py-1 rounded bg-emerald-500/20 disabled:opacity-30">群組</button>
+                        <button id="btn-ungroup" class="px-2 py-1 rounded bg-emerald-500/20 disabled:opacity-30">解散群組</button>
+                        <button id="btn-delete-object" class="px-2 py-1 rounded bg-red-500/20 disabled:opacity-30">刪除選取</button>
+                    </div>
+                    <p id="object-selection" class="text-[10px] text-slate-500"></p>
+                    <div class="grid grid-cols-2 gap-2">
+                        <label class="num-field"><span id="i18n-obj-w">寬</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-w" class="num-in" min="1" step="0.1" disabled></span></label>
+                        <label class="num-field"><span id="i18n-obj-h">高</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-h" class="num-in" min="1" step="0.1" disabled></span></label>
+                        <label class="num-field"><span>X</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-x" class="num-in" step="0.1" disabled></span></label>
+                        <label class="num-field"><span>Y</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-y" class="num-in" step="0.1" disabled></span></label>
+                        <label class="num-field col-span-2"><span id="i18n-obj-angle">旋轉</span><span class="num-wrap" data-unit="°"><input type="number" id="obj-angle" class="num-in" step="1" value="0" disabled></span></label>
+                        <button id="btn-obj-board" class="py-1.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30" disabled>置中於板材</button>
+                        <button id="btn-obj-origin" class="py-1.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30" disabled>置中於原點</button>
+                    </div>
+                    <p id="i18n-obj-tip" class="text-[9px] text-slate-500 dark:text-slate-400">X / Y 為物件中心相對機器中心的位置。可直接在預覽中拖曳移動，拖右下角縮放（等比例）。</p>
+                    <input type="hidden" id="target-width" value="100">
+                </section>
+
                 <!-- 筆桿直徑 -->
-                <section class="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-500/20 transition-colors duration-300">
+                <section class="studio-panel p-4 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-200 dark:border-blue-500/20 transition-colors duration-300">
                     <div class="flex justify-between items-center mb-2">
                         <label id="i18n-label-pen-diam" class="block text-[10px] font-black text-blue-600 dark:text-blue-400 none tracking-widest">筆桿直徑</label>
                         <span id="tool-type-badge" class="text-[9px] px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold uppercase">Laser</span>
@@ -389,7 +429,7 @@
                 </section>
 
                 <!-- Z 軸筆觸：校準筆的壓入深度，灰階深淺換算成筆觸粗細 -->
-                <section data-advanced class="p-4 bg-violet-50 dark:bg-violet-950/20 rounded-xl border border-violet-200 dark:border-violet-500/20 space-y-3">
+                <section data-advanced class="studio-panel p-4 bg-violet-50 dark:bg-violet-950/20 rounded-xl border border-violet-200 dark:border-violet-500/20 space-y-3">
                     <div class="flex justify-between items-center">
                         <label data-i18n="penzTitle" class="text-[10px] font-black text-violet-700 dark:text-violet-400 tracking-widest">Z 軸筆觸</label>
                         <input type="checkbox" id="penz-enable" class="w-4 h-4 accent-violet-500 rounded">
@@ -420,41 +460,13 @@
                 </section>
 
                 <!-- 毛胚：工作台與板材在「毛胚設定」頁設定，這裡只顯示摘要 -->
-                <section class="p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 space-y-1">
-                    <div class="flex justify-between items-center">
-                        <label data-i18n="labelStock" class="text-[10px] font-black text-amber-700 dark:text-amber-400 tracking-widest"></label>
-                        <a href="stock.html" data-i18n="linkStock" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline"></a>
-                    </div>
-                    <div id="stock-summary" class="text-[11px] font-mono text-slate-700 dark:text-slate-300 leading-relaxed"></div>
-                    <div id="table-unset" class="hidden text-[10px] font-bold text-amber-600 dark:text-amber-400"></div>
-                </section>
+
 
                 <!-- 加工物件：上傳的圖案 -->
-                <section class="p-4 bg-emerald-50 dark:bg-emerald-950/20 rounded-xl border border-emerald-200 dark:border-emerald-500/20 space-y-2">
-                    <label id="i18n-label-object" class="block text-[10px] font-black text-emerald-700 dark:text-emerald-400 tracking-widest">加工物件</label>
-                    <div id="object-list" class="space-y-1 max-h-44 overflow-y-auto"></div>
-                    <div class="flex flex-wrap gap-1 text-[11px]">
-                        <button id="btn-select-all" class="px-2 py-1 rounded bg-emerald-500/20">全選</button>
-                        <button id="btn-group" class="px-2 py-1 rounded bg-emerald-500/20 disabled:opacity-30">群組</button>
-                        <button id="btn-ungroup" class="px-2 py-1 rounded bg-emerald-500/20 disabled:opacity-30">解散群組</button>
-                        <button id="btn-delete-object" class="px-2 py-1 rounded bg-red-500/20 disabled:opacity-30">刪除選取</button>
-                    </div>
-                    <p id="object-selection" class="text-[10px] text-slate-500"></p>
-                    <div class="grid grid-cols-2 gap-2">
-                        <label class="num-field"><span id="i18n-obj-w">寬</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-w" class="num-in" min="1" step="0.1" disabled></span></label>
-                        <label class="num-field"><span id="i18n-obj-h">高</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-h" class="num-in" min="1" step="0.1" disabled></span></label>
-                        <label class="num-field"><span>X</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-x" class="num-in" step="0.1" disabled></span></label>
-                        <label class="num-field"><span>Y</span><span class="num-wrap" data-unit="mm"><input type="number" id="obj-y" class="num-in" step="0.1" disabled></span></label>
-                        <label class="num-field col-span-2"><span>旋轉</span><span class="num-wrap" data-unit="°"><input type="number" id="obj-angle" class="num-in" step="1" value="0" disabled></span></label>
-                        <button id="btn-obj-board" class="py-1.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30" disabled>置中於板材</button>
-                        <button id="btn-obj-origin" class="py-1.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/30" disabled>置中於原點</button>
-                    </div>
-                    <p id="i18n-obj-tip" class="text-[9px] text-slate-500 dark:text-slate-400">X / Y 為物件中心相對機器中心的位置。可直接在預覽中拖曳移動，拖右下角縮放（等比例）。</p>
-                    <input type="hidden" id="target-width" value="100">
-                </section>
+
 
                 <!-- 雷射雕刻建議：依毛胚材質帶入功率與速度（只在雷射模式顯示） -->
-                <section id="mat-advice" class="hidden p-4 bg-red-50 dark:bg-red-950/20 rounded-xl border border-red-200 dark:border-red-500/20 space-y-2">
+                <section id="mat-advice" class="studio-panel hidden p-4 bg-red-50 dark:bg-red-950/20 rounded-xl border border-red-200 dark:border-red-500/20 space-y-2">
                     <div class="flex justify-between items-center gap-2">
                         <label id="mat-advice-title" class="text-[10px] font-black text-red-700 dark:text-red-400 tracking-widest"></label>
                         <button id="btn-advice-apply" data-i18n="adviceApply" class="text-[10px] font-bold text-blue-600 dark:text-blue-400 hover:underline shrink-0"></button>
@@ -464,13 +476,13 @@
                 </section>
 
                 <!-- 工作走速 -->
-                <section>
+                <section class="studio-panel">
                     <label id="i18n-label-feed" class="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1 none">工作走速 (F)</label>
                     <input type="number" id="feed-rate" value="1500" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 p-2 rounded text-slate-800 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none text-sm font-mono transition-colors duration-300">
                 </section>
 
                 <!-- 灰階雷射功率範圍設定 (僅在啟用灰階填滿時顯示) -->
-                <section id="grayscale-power-container" data-advanced class="hidden p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 transition-all duration-300">
+                <section id="grayscale-power-container" data-advanced class="studio-panel hidden p-4 bg-amber-50 dark:bg-amber-950/20 rounded-xl border border-amber-200 dark:border-amber-500/20 transition-all duration-300">
                     <div class="flex justify-between items-center mb-1">
                         <label id="i18n-label-grayscale-power" class="text-[10px] font-black text-amber-600 dark:text-amber-400 tracking-widest">灰階功率範圍 (S)</label>
                         <span id="grayscale-range-display" class="text-xs font-mono font-bold text-amber-600 dark:text-amber-400">S0 - S255</span>
@@ -508,7 +520,7 @@
                     </div>
                     
                     <!-- 預設禁用狀態，待上傳後由 JS 轉為亮綠色 active 狀態 -->
-                    <button id="download-btn" class="w-full py-4 bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-black rounded-xl transition flex flex-col items-center justify-center leading-tight" disabled>
+                    <button data-ui-action="primary" id="download-btn" class="w-full py-4 bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-not-allowed font-black rounded-xl transition flex flex-col items-center justify-center leading-tight" disabled>
                         <span id="i18n-btn-download" class="text-sm">點擊下載檔案</span>
                         <span id="filename-preview" class="text-[10px] opacity-70 font-mono mt-1">filename.gcode</span>
                     </button>
@@ -839,7 +851,7 @@
             renderAdvancedState();
             document.getElementById('btn-obj-board').innerText = data.btnObjBoard;
             document.getElementById('btn-obj-origin').innerText = data.btnObjOrigin;
-            document.getElementById('i18n-obj-tip').innerText = data.objTip + (currentLang==='zh' ? ' ????? Shift ??????????????? Shift ? 15? ???????????' : ' Multi-select with checkboxes or Shift-click. Drag the round handle to rotate; Shift snaps to 15?. Positive angles turn counterclockwise.');
+            document.getElementById('i18n-obj-tip').innerText = data.objTip + (currentLang==='zh' ? ' 勾選清單或 Shift 點擊可多選；拖曳圓形把手旋轉，按住 Shift 每 15° 吸附。正角度為逆時針。' : ' Multi-select with checkboxes or Shift-click. Drag the round handle to rotate; Shift snaps to 15°. Positive angles turn counterclockwise.');
             document.getElementById('btn-fit-view').innerText = data.fitView;
             renderWorkspace();
             document.getElementById('i18n-opt-0').innerText = data.opt0;
@@ -1268,8 +1280,12 @@
                 button.onclick=e => selectObject(o.id,e.shiftKey);
                 row.append(check,button); list.append(row);
             });
-            const selected=selectionObjects();
-            document.getElementById('object-selection').innerText=selected.length ? '已選 '+selected.length+' 個物件；圖層設定編輯目前作用中的單張圖。' : '勾選多張圖可群組；再次匯入會追加。';
+            const selected=selectionObjects(),zh=currentLang==='zh';
+            document.getElementById('object-selection').innerText=selected.length
+                ? zh ? '已選 '+selected.length+' 個物件；圖層設定編輯目前作用中的單張圖。' : selected.length+' objects selected. Layers edit the active image.'
+                : zh ? '勾選多張圖可群組；再次匯入會追加。' : 'Select images to group. New imports are appended.';
+            const labels=zh ? ['全選','群組','解散群組','刪除選取','旋轉'] : ['Select all','Group','Ungroup','Delete selected','Rotation'];
+            ['btn-select-all','btn-group','btn-ungroup','btn-delete-object','i18n-obj-angle'].forEach((id,i)=>{document.getElementById(id).innerText=labels[i];});
             document.getElementById('btn-group').disabled=sceneBusy || selected.length<2;
             document.getElementById('btn-ungroup').disabled=sceneBusy || !selected.some(o => o.groupId);
             document.getElementById('btn-delete-object').disabled=sceneBusy || !selected.length;

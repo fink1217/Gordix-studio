@@ -1,0 +1,219 @@
+/* 共用視覺層級：只處理呈現，保留各工具的資料、事件與加工語意。 */
+:root {
+    --studio-bg: #f3f4f4;
+    --studio-surface: #fff;
+    --studio-raised: #f8f9f9;
+    --studio-input: #fff;
+    --studio-line: #d9dee1;
+    --studio-text: #202629;
+    --studio-muted: #58656c;
+    --studio-accent: #ff9b54;
+    --studio-accent-text: #21170f;
+    --studio-focus: #b95a15;
+}
+html.dark {
+    --studio-bg: #111516;
+    --studio-surface: #1a1f21;
+    --studio-raised: #202729;
+    --studio-input: #151b1d;
+    --studio-line: #354044;
+    --studio-text: #edf1f2;
+    --studio-muted: #a6b3b9;
+    --studio-focus: #ffb37c;
+    color-scheme: dark;
+}
+html:not(.dark) { color-scheme: light; }
+body[data-studio-page] {
+    background: var(--studio-bg);
+    color: var(--studio-text);
+    font-family: "Segoe UI", "Microsoft JhengHei UI", "Microsoft JhengHei", system-ui, sans-serif;
+    font-size: 14px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+body[data-studio-page] .studio-shell {
+    background: var(--studio-surface);
+    border-color: var(--studio-line);
+    box-shadow: 0 12px 48px #00000012;
+}
+body[data-studio-page] .studio-header {
+    background: #1a2022;
+    background-image: none;
+    border: 0;
+    border-top: 3px solid var(--studio-accent);
+    border-bottom: 1px solid #354044;
+    box-shadow: none;
+    color: #edf1f2;
+    padding: 20px 24px;
+    margin-bottom: 0;
+}
+.studio-header h1 { font-weight: 650; letter-spacing: -.025em; line-height: 1.3; }
+.studio-header :is(button, a) { min-height: 34px; min-width: 34px; }
+.studio-header [class*="bg-white"] { background-color: #ffffff08; border-color: #ffffff24; }
+.studio-workflow {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-bottom: 1px solid var(--studio-line);
+    background: var(--studio-surface);
+    padding: 0 20px;
+    gap: 12px;
+}
+.studio-workflow a {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 52px;
+    padding: 10px 8px;
+    color: var(--studio-muted);
+    border-bottom: 2px solid transparent;
+    text-decoration: none;
+    font-size: 12px;
+    font-weight: 600;
+    transition: color .15s, border-color .15s;
+}
+.studio-workflow a b { font-size: 10px; font-family: Consolas, monospace; font-weight: 500; opacity: .75; }
+.studio-workflow a:hover { color: var(--studio-text); border-bottom-color: var(--studio-line); }
+.studio-workflow a[aria-current="step"] { color: var(--studio-text); border-bottom-color: var(--studio-focus); }
+.studio-workflow a[aria-current="step"] b { color: var(--studio-focus); opacity: 1; }
+.studio-workflow .studio-en { display: none; }
+html[lang="en"] .studio-workflow .studio-zh { display: none; }
+html[lang="en"] .studio-workflow .studio-en { display: inline; }
+body[data-studio-page] .studio-panel,
+body[data-studio-page] .controls-card,
+body[data-studio-page] .panel {
+    background: var(--studio-raised);
+    color: var(--studio-text);
+    border: 1px solid var(--studio-line);
+    border-radius: 12px;
+    box-shadow: none;
+}
+.studio-panel { padding: 18px; }
+.studio-panel:focus-within { border-color: var(--studio-focus) !important; }
+body[data-studio-page] :is(.studio-panel, .controls-card) :is(.label, .label-text, .num-field) {
+    color: var(--studio-muted);
+    font-size: 12px;
+    letter-spacing: .01em;
+    font-weight: 600;
+}
+body[data-studio-page] .studio-panel :is([class~="text-[9px]"], [class~="text-[10px]"]) {
+    font-size: 11px;
+    line-height: 1.6;
+}
+body[data-studio-page] .studio-panel > :is(label, .label, h2, h3),
+body[data-studio-page] .studio-panel > div > :is(label, .label, h2, h3) {
+    letter-spacing: .025em;
+    font-weight: 650;
+}
+body[data-studio-page] :is(input[data-calc], input[type="number"], select, textarea) {
+    background: var(--studio-input);
+    border-color: var(--studio-line);
+    border-radius: 7px;
+    color: var(--studio-text);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+body[data-studio-page] :is(.num-in, input[data-calc], input[type="number"]) { min-height: 36px; }
+body[data-studio-page] .num-field { gap: 5px; }
+body[data-studio-page] :is(input[data-calc], input[type="number"]) { font-family: Consolas, "SFMono-Regular", monospace; }
+body[data-studio-page] :is(button, a, input, select, textarea, label[for]):focus-visible {
+    outline: 2px solid var(--studio-focus);
+    outline-offset: 3px;
+}
+body[data-studio-page] input[data-calc].calc-error { border-color: #ef4444; }
+body[data-studio-page] [data-ui-action="primary"] {
+    background: var(--studio-accent);
+    border: 1px solid transparent;
+    color: var(--studio-accent-text);
+    font-weight: 700;
+    box-shadow: none;
+    min-height: 44px;
+}
+body[data-studio-page] [data-ui-action="primary"]:not(:disabled):hover { background: #ffb37c; }
+body[data-studio-page] [data-ui-action="primary"]:disabled { background: var(--studio-line); color: var(--studio-muted); opacity: .65; }
+body[data-studio-page] [data-ui-action="import"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    background: var(--studio-text);
+    color: var(--studio-surface);
+    border: 1px solid var(--studio-text);
+    border-radius: 7px;
+    font-weight: 650;
+    box-shadow: none;
+}
+body[data-studio-page] [data-ui-action="import"]:hover { opacity: .88; }
+body[data-studio-page] :is(.preview-wrapper, #preview-container, #preview-box) { box-shadow: none; border-width: 1px; }
+body[data-studio-page] :is(.studio-panel, .controls-card) :is(button, .btn):not([data-ui-action]) { min-height: 30px; }
+body[data-studio-page="draw"] .studio-sidebar { background: var(--studio-surface); padding: 20px; }
+body[data-studio-page="draw"] .studio-center { background: var(--studio-bg); padding: 24px; min-width: 0; }
+body[data-studio-page="draw"] #object-list [data-object] { min-height: 34px; }
+body[data-studio-page="draw"] #object-list button { font-size: 12px; }
+body[data-studio-page="draw"] #object-selection { color: var(--studio-muted); line-height: 1.6; }
+body[data-studio-page="draw"] #status-panel { border-top: 1px solid var(--studio-line); padding-top: 20px; }
+body[data-studio-page="CNC"] .card { padding: 18px; }
+body[data-studio-page="CNC"] .btn-main:not([data-ui-action]) { box-shadow: none; }
+body[data-studio-page="index"] .step-card { border-radius: 12px; }
+body[data-studio-page="index"] .step-card-idle { background: var(--studio-raised); border-color: var(--studio-line); }
+body[data-studio-page="index"] .step-card-active { background: var(--studio-raised); border-color: var(--studio-focus); box-shadow: inset 3px 0 var(--studio-focus); }
+body[data-studio-page="index"] .step-dot-active { box-shadow: none; background: var(--studio-accent); color: var(--studio-accent-text); }
+body[data-studio-page="index"] .step-title { font-weight: 650; font-size: 19px; }
+body[data-studio-page="index"] .step-label { color: var(--studio-muted); font-size: 11px; }
+body[data-studio-page="index"] .tool-choice { background: var(--studio-surface); border-color: var(--studio-line); }
+body[data-studio-page="index"] .tool-choice:hover { border-color: var(--studio-focus); }
+body[data-studio-page="index"] main { gap: 40px; }
+body[data-studio-page="index"] aside { color: var(--studio-muted); }
+body[data-studio-page="table_conf"] {
+    --bg-panel: var(--studio-surface);
+    --border-panel: var(--studio-line);
+    --bg-input: var(--studio-input);
+    --border-input: var(--studio-line);
+    --text-input: var(--studio-text);
+    --text-muted: var(--studio-muted);
+    --bg-primary-btn: var(--studio-accent);
+    --text-primary-btn: var(--studio-accent-text);
+    --bg-primary-btn-hover: #ffb37c;
+}
+body[data-studio-page="Gcodetrans"] {
+    --panel-dark: var(--studio-raised);
+    --input-bg: var(--studio-input);
+    --input-text: var(--studio-text);
+    --input-border: var(--studio-line);
+    --label-color: var(--studio-muted);
+}
+body[data-studio-page="params"] .orange-glow { text-shadow: none; }
+body[data-studio-page="vc"] > .studio-header { position: relative; }
+@media (min-width: 1024px) {
+    body[data-studio-page="draw"] .studio-sidebar { max-height: calc(100vh - 190px); }
+}
+@media (max-width: 767px) {
+    body[data-studio-page] { padding: 12px; }
+    body[data-studio-page] .studio-header { padding: 16px; flex-wrap: wrap; gap: 14px; }
+    .studio-header h1 { font-size: 18px; }
+    .studio-header :is(button,a) { min-height: 38px; min-width: 38px; }
+    .studio-workflow { padding: 0 6px; gap: 0; }
+    .studio-workflow a { flex-direction: column; justify-content: center; gap: 0; padding: 8px 2px; min-height: 56px; font-size: 11px; }
+    body[data-studio-page] :is(.studio-panel,.controls-card) :is(button,.btn,select):not([hidden]) { min-height: 40px; }
+    body[data-studio-page] .studio-panel { padding: 16px; }
+    body[data-studio-page="draw"] .studio-sidebar { max-height: none; overflow: visible; padding: 16px; }
+    body[data-studio-page="draw"] .studio-center { padding: 16px; }
+    body[data-studio-page="index"] main { padding: 24px 16px; gap: 28px; }
+    body[data-studio-page="index"] .step-card { padding: 16px; }
+    body[data-studio-page="index"] .step-title { font-size: 17px; }
+}
+@media (prefers-reduced-motion: reduce) {
+    body[data-studio-page] *, body[data-studio-page] *::before, body[data-studio-page] *::after {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
+
+/* 頁外底色與下一步按鈕也沿用目前流程狀態。 */
+html.dark body[data-studio-page], html:not(.dark) body[data-studio-page] { background: var(--studio-bg); }
+body[data-studio-page="index"] .step-card-active > a:not(.tool-choice) {
+    background: var(--studio-accent); color: var(--studio-accent-text); min-height: 44px;
+}
+/* 進階模式開啟時仍保留清楚的選取狀態。 */
+.studio-header #advanced-toggle[class~="bg-white"] { background: #edf1f2; color: #202629; border-color: #edf1f2; }

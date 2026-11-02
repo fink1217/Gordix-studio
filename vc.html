@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>V_Carving & Grayscale Relief</title>
     <!-- 引入 Tailwind CSS 與 Three.js 及其控制庫 -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="vendor/tailwindcss.js?v=3.4.17"></script>
     <!-- 數字欄位可以輸入算式（+ - * /） -->
     <script src="gordix-calc.js?v=10"></script>
     <script>
@@ -118,11 +118,13 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link class="apple-touch-icon" href="icon-192.png">
+    <link rel="stylesheet" href="gordix-ui.css?v=14">
+    <script src="gordix-ui.js?v=14" defer></script>
 </head>
-<body class="flex flex-col min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-200">
-    <div class="max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors duration-300">
+<body data-studio-page="vc" class="flex flex-col min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 transition-colors duration-200">
+    <div class="studio-shell max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 transition-colors duration-300">
    
-    <header class="w-full bg-gradient-to-r from-red-700 to-rose-950 p-6 text-white flex justify-between items-center border-b border-red-500/30 sticky top-0 z-50 shadow-md">
+    <header class="studio-header w-full bg-gradient-to-r from-red-700 to-rose-950 p-6 text-white flex justify-between items-center border-b border-red-500/30 sticky top-0 z-50 shadow-md">
         <div>
             <h1 id="i18n-title" class="text-2xl font-black tracking-tight text-white" data-i18n="appTitle">轉檔工具 (V雕刻 & 灰階浮雕)</h1>
         </div>
@@ -150,6 +152,12 @@
             </a>
         </div>
     </header>
+        <nav class="studio-workflow" aria-label="加工流程 / Workflow">
+            <a href="table_conf.html"><b>01</b><span class="studio-zh">工作台</span><span class="studio-en">Table</span></a>
+            <a href="stock.html"><b>02</b><span class="studio-zh">毛胚</span><span class="studio-en">Stock</span></a>
+            <a href="index.html#step-3" aria-current="step"><b>03</b><span class="studio-zh">加工設定</span><span class="studio-en">Toolpaths</span></a>
+            <a href="Gcodetrans.html"><b>04</b><span class="studio-zh">檢查輸出</span><span class="studio-en">Review</span></a>
+        </nav>
 
     <main class="p-4 md:p-8 flex-grow">
         <div class="max-w-[1600px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -228,7 +236,7 @@
                         <p class="text-[10px] text-slate-500 dark:text-slate-400 uppercase font-bold mb-1" data-i18n="estTime">預估總加工時間</p>
                         <p id="est-time" class="text-3xl font-mono font-bold text-red-600 dark:text-red-500">00:00:00</p>
                     </div>
-                    <button id="export-gcode" class="w-full sm:w-auto px-10 py-4 btn-red rounded-xl font-black text-sm uppercase shadow-xl" data-i18n="downloadBtn">下載檔案</button>
+                    <button data-ui-action="primary" id="export-gcode" class="w-full sm:w-auto px-10 py-4 btn-red rounded-xl font-black text-sm uppercase shadow-xl" data-i18n="downloadBtn">下載檔案</button>
                 </div>
             </div>
 

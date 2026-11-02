@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Table Configurator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="vendor/tailwindcss.js?v=3.4.17"></script>
     <!-- 數字欄位可以輸入算式（+ - * /） -->
     <script src="gordix-calc.js?v=10"></script>
     <style>
@@ -290,11 +290,13 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="icon-192.png">
 
+    <link rel="stylesheet" href="gordix-ui.css?v=14">
+    <script src="gordix-ui.js?v=14" defer></script>
 </head>
-<body class="p-2 md:p-8">
-    <div class="max-w-7xl mx-auto">
+<body data-studio-page="table_conf" class="p-2 md:p-8">
+    <div class="studio-shell max-w-7xl mx-auto">
         <!-- 改良為深灰色主題的高質感 Header -->
-        <header class="mb-4 md:mb-6 bg-gradient-to-r from-neutral-800 via-slate-900 to-zinc-900 p-6 text-white flex justify-between items-center rounded-xl border border-neutral-700/50 shadow-lg">
+        <header class="studio-header mb-4 md:mb-6 bg-gradient-to-r from-neutral-800 via-slate-900 to-zinc-900 p-6 text-white flex justify-between items-center rounded-xl border border-neutral-700/50 shadow-lg">
             <div>
                 <h1 id="ui-title" class="text-xl md:text-2xl font-black tracking-tight text-white">桌長配置產生器</h1>
             </div>
@@ -320,6 +322,12 @@
                 </button>
             </div>
         </header>
+        <nav class="studio-workflow" aria-label="加工流程 / Workflow">
+            <a href="table_conf.html" aria-current="step"><b>01</b><span class="studio-zh">工作台</span><span class="studio-en">Table</span></a>
+            <a href="stock.html"><b>02</b><span class="studio-zh">毛胚</span><span class="studio-en">Stock</span></a>
+            <a href="index.html#step-3"><b>03</b><span class="studio-zh">加工設定</span><span class="studio-en">Toolpaths</span></a>
+            <a href="Gcodetrans.html"><b>04</b><span class="studio-zh">檢查輸出</span><span class="studio-en">Review</span></a>
+        </nav>
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
             <!-- 左側繪圖與數值輸入區 -->
@@ -420,7 +428,7 @@
                                 </div>
                                 <p class="text-[11px] text-muted-custom mt-1 font-mono" id="cal-limit"></p>
                                 <p class="text-[11px] font-bold text-amber-500 mt-1" id="cal-baseline"></p>
-                                <button onclick="downloadCalFrame()" id="cal-download" class="mt-2 w-full btn-custom-primary font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"></button>
+                                <button data-ui-action="primary" onclick="downloadCalFrame()" id="cal-download" class="mt-2 w-full btn-custom-primary font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"></button>
                             </div>
 
                             <div class="p-3 rounded-lg range-box border">
@@ -436,7 +444,7 @@
                                 <div class="font-bold text-title mb-1" id="cal-s3"></div>
                                 <div id="cal-result" class="font-mono text-custom leading-relaxed"></div>
                                 <div id="cal-warn" class="hidden mt-1 text-[11px] font-bold text-amber-500"></div>
-                                <button onclick="applyCal()" id="cal-apply" class="mt-2 w-full btn-custom-primary font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"></button>
+                                <button data-ui-action="primary" onclick="applyCal()" id="cal-apply" class="mt-2 w-full btn-custom-primary font-bold py-2 rounded-lg disabled:opacity-40 disabled:cursor-not-allowed"></button>
                                 <p class="text-[11px] font-bold text-green-500 mt-2 hidden" id="cal-done"></p>
                             </div>
                         </div>
@@ -478,7 +486,7 @@
                         </button>
                         <input type="file" id="fileInput" class="hidden" accept=".cfg" onchange="handleFileUpload(event)">
                         
-                        <button onclick="downloadAll()" class="w-full btn-custom-primary font-bold py-3 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
+                        <button data-ui-action="primary" onclick="downloadAll()" class="w-full btn-custom-primary font-bold py-3 px-4 rounded-xl transition-all shadow-md flex items-center justify-center gap-2">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
                             <span id="ui-download-btn">下載 table.cfg</span>
                         </button>

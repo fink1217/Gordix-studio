@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GORDIX STUDIO</title>
     <!-- 引入與 1.html 相同之 Tailwind CSS -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="vendor/tailwindcss.js?v=3.4.17"></script>
     <script>
         tailwind.config = {
             darkMode: 'class'
@@ -48,13 +48,15 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link class="theme-transition" rel="apple-touch-icon" href="icon-192.png">
+    <link rel="stylesheet" href="gordix-ui.css?v=14">
+    <script src="gordix-ui.js?v=14" defer></script>
 </head>
-<body class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans theme-transition">
+<body data-studio-page="index" class="bg-slate-50 dark:bg-slate-950 min-h-screen p-4 md:p-8 text-slate-800 dark:text-slate-200 font-sans theme-transition">
     <!-- 主卡片容器 (承襲 1.html 的外觀與風格) -->
-    <div class="max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 theme-transition">
+    <div class="studio-shell max-w-7xl mx-auto bg-white dark:bg-slate-900 rounded-2xl shadow-2xl overflow-hidden border border-slate-200 dark:border-slate-800 theme-transition">
         
         <!-- Header: 黑色主題色 -->
-        <div class="bg-gradient-to-r from-black via-zinc-900 to-neutral-950 p-6 text-white flex justify-between items-center border-b border-zinc-800">
+        <div class="studio-header bg-gradient-to-r from-black via-zinc-900 to-neutral-950 p-6 text-white flex justify-between items-center border-b border-zinc-800">
             <div>
                 <!-- GORDIX Logo，GORDIX 為白色，STUDIO 為亮橘色 -->
                 <h1 class="text-2xl md:text-3xl font-black tracking-widest select-none">
@@ -76,6 +78,12 @@
                 </button>
             </div>
         </div>
+        <nav class="studio-workflow" aria-label="加工流程 / Workflow">
+            <a href="table_conf.html"><b>01</b><span class="studio-zh">工作台</span><span class="studio-en">Table</span></a>
+            <a href="stock.html"><b>02</b><span class="studio-zh">毛胚</span><span class="studio-en">Stock</span></a>
+            <a href="index.html#step-3"><b>03</b><span class="studio-zh">加工設定</span><span class="studio-en">Toolpaths</span></a>
+            <a href="Gcodetrans.html"><b>04</b><span class="studio-zh">檢查輸出</span><span class="studio-en">Review</span></a>
+        </nav>
 
         <!-- 改版說明：這是社群改版，功能仍在完善中 -->
         <div class="px-6 py-3 text-sm bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200 border-b border-amber-200 dark:border-amber-900"
