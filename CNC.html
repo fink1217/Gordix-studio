@@ -557,8 +557,8 @@ function appendPaths(paths,center,replace) {
     const layers=groups.map((g,i)=>old.get(g.key) || {
         id:'L'+layerSeq++,sourceId:source.id,key:g.key,
         name:g.key,color:source.groupMode==='color'?g.key:LAYER_COLORS[i%LAYER_COLORS.length],
-        // 整層都是開放的線（例如定位線）預設雷射畫線，不要被當成外框切
-        visible:true,op:g.paths.every(p=>p.closed===false)?'laserLine':'profile',toolId:firstFlat(),depth:3,through:false,tabs:false
+        // 圖層裡有開放的線（例如定位線，常夾雜幾個完整的圈）預設雷射畫線：開放線不能當外框切
+        visible:true,op:g.paths.some(p=>p.closed===false)?'laserLine':'profile',toolId:firstFlat(),depth:3,through:false,tabs:false
     });
     job.layers.push(...layers.filter(l=>!job.layers.some(old=>old.id===l.id)));
     const added=[];
