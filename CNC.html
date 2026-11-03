@@ -276,10 +276,10 @@
 
 <script src="gordix-table.js?v=10"></script>
 <script src="gordix-workspace.js?v=10"></script>
-<script src="gordix-import.js?v=16"></script>
-<script src="gordix-vcarve.js?v=10"></script>
+<script src="gordix-import.js?v=17"></script>
+<script src="gordix-vcarve.js?v=11"></script>
     <script src="gordix-route.js?v=18"></script>
-    <script src="gordix-cam.js?v=25"></script>
+    <script src="gordix-cam.js?v=26"></script>
 <script src="gordix-materials.js?v=10"></script>
 <script src="gordix-preview.js?v=18"></script>
 <script src="gordix-sim.js?v=18"></script>
@@ -557,7 +557,8 @@ function appendPaths(paths,center,replace) {
     const layers=groups.map((g,i)=>old.get(g.key) || {
         id:'L'+layerSeq++,sourceId:source.id,key:g.key,
         name:g.key,color:source.groupMode==='color'?g.key:LAYER_COLORS[i%LAYER_COLORS.length],
-        visible:true,op:'profile',toolId:firstFlat(),depth:3,through:false,tabs:false
+        // 整層都是開放的線（例如定位線）預設雷射畫線，不要被當成外框切
+        visible:true,op:g.paths.every(p=>p.closed===false)?'laserLine':'profile',toolId:firstFlat(),depth:3,through:false,tabs:false
     });
     job.layers.push(...layers.filter(l=>!job.layers.some(old=>old.id===l.id)));
     const added=[];
@@ -1236,7 +1237,7 @@ function render2D() {
     const area = o => { const b = selectionBox([o]); return (b.maxX - b.minX) * (b.maxY - b.minY); };
     job.objects.filter(objectShown).sort((a, b) => area(b) - area(a)).forEach(o => {
         const l = layerOf(o.layerId), sel = selObjs.has(o.id), dim = !l.visible || (selLayerId && o.layerId !== selLayerId && !sel);
-        s.push(`<path data-obj="${o.id}" d="${pathD(GordixCam.objectPath(o,l.op), l.op!=='laserLine' || o.closed!==false)}" fill="${sel ? 'rgba(250,204,21,0.12)' : 'rgba(0,0,0,0.001)'}" stroke="${sel ? '#facc15' : l.color}"
+        s.push(`<path data-obj="${o.id}" d="${pathD(GordixCam.objectPath(o,l.op), (l.op!=='laserLine' && l.op!=='engrave') || o.closed!==false)}" fill="${sel ? 'rgba(250,204,21,0.12)' : 'rgba(0,0,0,0.001)'}" stroke="${sel ? '#facc15' : l.color}"
             stroke-width="${sel ? 2.5 : 1.5}" stroke-opacity="${dim ? 0.35 : 1}" ${l.visible ? '' : 'stroke-dasharray="3 3"'} ${nss} style="cursor:move"/>`);
     });
     // 加工順序（跨檔連號）

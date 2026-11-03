@@ -391,13 +391,15 @@ const GordixImport = (() => {
             const paths = [];
 
             dxf.entities.forEach(ent => {
-                let pts = [];
+                let pts = [], closed = false;   // 開放的線（LINE、ARC、未封閉的 POLYLINE）匯入後維持開放
                 if (ent.type === 'LINE') {
                     pts = [{x: ent.vertices[0].x, y: ent.vertices[0].y}, {x: ent.vertices[1].x, y: ent.vertices[1].y}];
                 } else if (ent.type === 'LWPOLYLINE' || ent.type === 'POLYLINE') {
                     ent.vertices.forEach(v => pts.push({x: v.x, y: v.y}));
                     if (ent.shape) pts.push(pts[0]);
+                    closed = !!ent.shape || (pts.length > 2 && pts[0].x === pts[pts.length - 1].x && pts[0].y === pts[pts.length - 1].y);
                 } else if (ent.type === 'CIRCLE' || ent.type === 'ARC') {
+                    closed = ent.type === 'CIRCLE';
                     const start = ent.startAngle || 0, end = ent.endAngle !== undefined ? ent.endAngle : Math.PI*2;
                     const r = ent.radius, steps = 64;
                     for(let i=0; i<=steps; i++) {
@@ -409,7 +411,8 @@ const GordixImport = (() => {
                     paths.push({
                         points: simplifyPath(pts, smoothTol),
                         layer: ent.layer || "Default",
-                        color: dxfColor(dxf, ent)
+                        color: dxfColor(dxf, ent),
+                        closed
                     });
                 }
             });
@@ -439,7 +442,8 @@ const GordixImport = (() => {
                 y: pt.y * scale + offsetY
             })),
             layer: p.layer,
-            color: p.color
+            color: p.color,
+            closed: p.closed
         }));
     }
 
@@ -524,7 +528,8 @@ const GordixImport = (() => {
             const points = p.points.map(pt => ({ x: pt.x - gCx, y: pt.y - gCy }));
             const first = points[0], last = points[points.length - 1];
             const closed = p.closed !== undefined ? p.closed : Math.hypot(first.x-last.x, first.y-last.y)<1e-6;
-            if (points.length > 2 && (first.x !== last.x || first.y !== last.y)) points.push({ ...first });
+            // DXF 明確是開放的線（closed === false，例如定位線）不補閉合點；SVG 沒有這個標記，照舊補
+            if (p.closed !== false && points.length > 2 && (first.x !== last.x || first.y !== last.y)) points.push({ ...first });
             return { points, closed, layer: p.layer || 'Default', color: p.color || null };
         });
     }

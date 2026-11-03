@@ -576,7 +576,7 @@ const GordixCam = (() => {
             // 演算法在 gordix-vcarve.js（原樣搬自舊 vc.html）；每個要雕的區域 / 每個物件是一個單元，才能由中心往外排序
             const shapes = objs.map(o => o.points);
             if (layer.op === 'engrave') {
-                return GordixVCarve.engrave(shapes, layerDepth(job, layer), tool.step, job.resolution).map((paths, i) =>
+                return GordixVCarve.engrave(shapes, layerDepth(job, layer), tool.step, job.resolution, objs.map(o => o.closed === false)).map((paths, i) =>
                     unit('path3d', [objs[i].id], nest.get(objs[i].id), [{ paths, isContour: false, linkDist: 0.1 }]));
             }
             const r = GordixVCarve.vcarve(shapes, {

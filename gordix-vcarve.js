@@ -585,10 +585,11 @@ const GordixVCarve = (() => {
     }
 
     // 沿線雕刻：沿著每個物件的線，深度 depth；每層下刀 step 小於深度時分層（V 刀預設一次到深）
-    function engrave(shapes, depth, step, resolution) {
+    // open[i] 為 true 的是開放的線（例如定位線），照原樣雕、不接回起點
+    function engrave(shapes, depth, step, resolution, open) {
         const passes = Math.max(1, Math.ceil(depth / (step || depth)));
-        return shapes.map(path => {
-            const closed = path.length > 2 && (path[0].x !== path[path.length - 1].x || path[0].y !== path[path.length - 1].y) ? [...path, path[0]] : path;
+        return shapes.map((path, i) => {
+            const closed = !(open && open[i]) && path.length > 2 && (path[0].x !== path[path.length - 1].x || path[0].y !== path[path.length - 1].y) ? [...path, path[0]] : path;
             const out = [];
             for (let k = 1; k <= passes; k++) {
                 const z = -Math.min(depth, k * step || depth);
